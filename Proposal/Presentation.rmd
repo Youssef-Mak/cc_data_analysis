@@ -1,8 +1,11 @@
 ---
-title: "A Data-Driven Analysis on Climate Change from an Economical Standpoint <br> Project Proposal </br> <br> SDS 3386 </br>"
+title: A Data-Driven Analysis on Climate Change from an Economical Standpoint <br>
+  Project Proposal </br> <br> SDS 3386 </br>
 author: "Youssef, Shaafici, Thinh, Vinh"
-date: "2019-10-07"
-output: slidy_presentation
+date: '2019-10-07'
+output:
+  slidy_presentation: default
+  ioslides_presentation: default
 ---
 
 ```{r setup, include=FALSE}
@@ -53,9 +56,13 @@ knitr::opts_chunk$set(echo = TRUE)
 # Methodology
 
 - Find correlations between economic growth and emissions per country and sector
-  - Linear Regression
+  - MultiLevel Regression
 
 - ARIMA or other forecasting methods to forecast future growth and emissions
+
+- Important of us to take seasonality into account!
+
+- Creating a metric for how strong climate change regulations are for each country
 
 <!-- WE NEED A METHOD TO DETERMINE ECOLOGICAL REGULATION PERFOMANCE -->
 
