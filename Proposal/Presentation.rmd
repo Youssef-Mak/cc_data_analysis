@@ -11,17 +11,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Problem at Hand
 
-- Climate change and increasing greenhouse gas emissions are gaining public attention
-
-- The polluant industries contribute to the economy
+- Climate change and increasing greenhouse gas emissions are gaining political attention
 
 - Industries grow and contribute to economy but produce more emissions
 
-- How do polluant industries contribute to economy growth
+- Regulations are imposed affecting economic growth
 
-- How do regulations affect economical performance
+<!-- BASICALLY GOVERNMENTS SEE POLUTION -> WANT TO DO SOMETHING ABOUT IT BUT THEY DONT KNOW THE ECONOMIC IMPACT SO LETS SEE IF ITS WORTH IT(ECON STANPOINT) USING DATA SCIENCE MAGIC -->
 
-- Analyze how polluant industries contribute to more emissions per sector
+<!-- - How do polluant industries contribute to economic growth -->
+
+<!-- - How do regulations affect economic performance -->
+
+<!-- - How does climate changes affect economic performance -->
 
 
 <!-- ![](greenhouse_gasses.jpg) -->
@@ -51,10 +53,11 @@ knitr::opts_chunk$set(echo = TRUE)
 # Methodology
 
 - Find correlations between economic growth and emissions per country and sector
+  - Linear Regression
 
 - ARIMA or other forecasting methods to forecast future growth and emissions
 
-- Other shit
+<!-- WE NEED A METHOD TO DETERMINE ECOLOGICAL REGULATION PERFOMANCE -->
 
 # Questions
 
