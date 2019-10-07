@@ -1,0 +1,69 @@
+---
+title: "A Data-Driven Analysis on Climate Change from an Economical Standpoint <br> Project Proposal </br> <br> SDS 3386 </br>"
+author: "Youssef, Shaafici, Thinh, Vinh"
+date: "2019-10-07"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem at Hand
+
+- Climate change and increasing greenhouse gas emissions are gaining public attention
+
+- The polluant industries contribute to the economy
+
+- Industries grow and contribute to economy but produce more emissions
+
+- How do polluant industries contribute to economy growth
+
+- How do regulations affect economical performance
+
+- Analyze how polluant industries contribute to more emissions per sector
+
+
+<!-- ![](greenhouse_gasses.jpg) -->
+![](problemDiagram.png)
+
+# Objectives
+
+<!-- Maybe we could mention developing vs established economies for each of these points -->
+- Measure the impact of pollutant industries on economic develoment
+
+- Measure the effects of gas emission regulations on industry and economy growth
+
+- Measure the effects(cost) of climate change on global economies (e.g. natural disasters)
+
+# Data sets
+
+- Climate change laws per country (LSE Grantham Research Institute on Climate Change and the Environment)
+
+- National income by activity (data.oecd)
+
+- International greenhouse gas emissions (United Nations via Kaggle)
+
+- Greenhouse gas emissions per country per subsector (CAIT Climate Data Explorer)
+
+- National Footprint Accounts 2018 (Global Footprint Network)
+
+# Methodology
+
+- Find correlations between economic growth and emissions per country and sector
+
+- ARIMA or other forecasting methods to forecast future growth and emissions
+
+- Other shit
+
+# Questions
+
+# Thank you
+
+
+
+
+
+
+
+
