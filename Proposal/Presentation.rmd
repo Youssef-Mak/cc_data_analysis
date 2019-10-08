@@ -65,6 +65,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 -   Creating a metric for how strong climate change regulations are for each country
 
+-   Measure the impact of particular laws to gdp and emissions
+
 <!-- WE NEED A METHOD TO DETERMINE ECOLOGICAL REGULATION PERFOMANCE -->
 
 # Questions
