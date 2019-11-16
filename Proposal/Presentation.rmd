@@ -1,6 +1,6 @@
 ---
-title: A Data-Driven Analysis on Climate Change from an Economical Standpoint <br>
-  Project Proposal </br> <br> SDS 3386 </br>
+title: A Data-Driven Analysis on Climate Change from an Economic Standpoint <br> <br>
+  Project Proposal </br> </br> <br> SDS 3386 </br>
 author: "Youssef, Shaafici, Thinh, Vinh"
 date: '2019-10-07'
 output:
@@ -35,7 +35,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Objectives
 
 <!-- Maybe we could mention developing vs established economies for each of these points -->
-- Measure the impact of pollutant industries on economic develoment
+- Measure the impact of pollutant industries on economic development
 
 - Measure the effects of gas emission regulations on industry and economy growth
 
@@ -56,13 +56,16 @@ knitr::opts_chunk$set(echo = TRUE)
 # Methodology
 
 - Find correlations between economic growth and emissions per country and sector
-  - MultiLevel Regression
 
-- ARIMA or other forecasting methods to forecast future growth and emissions
+-   MultiLevel Regression
 
-- Important of us to take seasonality into account!
+-   ARIMA or other forecasting methods to forecast future growth and emissions
 
-- Creating a metric for how strong climate change regulations are for each country
+<!-- -  Important of us to take seasonality into account! -->
+
+-   Creating a metric for how strong climate change regulations are for each country
+
+-   Measure the impact of particular laws to gdp and emissions
 
 - Measure the impact of particular laws to gpd and emissions
 
