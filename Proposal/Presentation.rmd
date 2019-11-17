@@ -67,6 +67,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 -   Measure the impact of particular laws to gdp and emissions
 
+- Measure the impact of particular laws to gpd and emissions
+
 <!-- WE NEED A METHOD TO DETERMINE ECOLOGICAL REGULATION PERFOMANCE -->
 
 # Questions
