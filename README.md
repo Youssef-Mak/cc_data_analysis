@@ -1,5 +1,5 @@
 # cc_data_analysis
-Data Science Project pertaining to the affect of climate change regulations and the economic impact of polluting industries
+Exploratory data analysis pertaining to the affect of climate change regulations and the economic impact of polluting industries
 
 Datasets used
 - https://data.oecd.org/natincome/value-added-by-activity.htm#indicator-chart
