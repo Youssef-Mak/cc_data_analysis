@@ -148,9 +148,12 @@ Assumptions, the categories and sectored described by the different files refer 
 regulations <- read_csv('data/raw/law_search/data.csv') %>% 
   clean_names() %>% 
   rename(year = year_passed) %>% 
-  mutate(categories = str_to_lower(categories)) %>% 
-  mutate(categories = str_replace_all(categories, '; ', ';')) %>% 
-  mutate(categories = str_split(categories, ';'))
+  mutate(categories = categories %>% 
+           str_to_lower() %>% 
+           str_replace_all('energy supply|energy demand', 'energy') %>% 
+           str_replace_all('; ', ';') %>% 
+           str_split(';')) %>% 
+  mutate(categories = map(categories, unique))
   
 regulation_category_types <- regulations %>% 
   select(categories) %>% 
@@ -159,15 +162,15 @@ regulation_category_types <- regulations %>%
   unique()
 
 
-# Common categories among regulations and ghg emissions per country
-common_categories <-
-  tribble(
-    ~regulation_categories, ~country_ghg_categories,
-    'REDD+ and LULUCF', 'land use change and forestry mt co2e',
-    'Energy Demand and Energy Supply', 'energy_mt_co2e',
-    'Industry', 'industrical_processes_mt_co2e',
-    'Transportation', 'transportation_mt_co2 (also part of energy)',
-  )
+# # Common categories among regulations and ghg emissions per country
+# common_categories <-
+#   tribble(
+#     ~regulation_categories, ~country_ghg_categories,
+#     'REDD+ and LULUCF', 'land use change and forestry mt co2e',
+#     'Energy Demand and Energy Supply', 'energy_mt_co2e',
+#     'Industry', 'industrical_processes_mt_co2e',
+#     'Transportation', 'transportation_mt_co2 (also part of energy)',
+#   )
 
 
 # Effects of Regulations - Canada -----------------------------------------
@@ -183,7 +186,8 @@ We can check to see if Canada did even meet its goals'
 canada_ghg_emissions <- read_csv('data/raw/GHG-emissions-sector-en.csv', skip=2) %>% 
   clean_names() %>% 
   filter(!str_detect(year, 'Note|Source|Available')) %>% 
-  mutate(year = as.integer(year))
+  mutate(year = as.integer(year)) %>% 
+  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e')
 
 # NOTE: Oil and gas is equivalent to carbon pricing?
 canada_category_mappings <- 
@@ -197,44 +201,36 @@ canada_category_mappings <-
     'waste_and_others_megatonnes_of_carbon_dioxide_equivalent', 'waste'
   )
 
-
-# NOTE: One extra row because there were two laws that were passed in 2010 both under transportation
-canada_ghg_emissions_and_regulations <- canada_ghg_emissions %>% 
-  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e') %>% 
-  left_join(canada_category_mappings, by=c('category' = 'canada_category')) %>% 
-  left_join(regulations %>% 
-              filter(country=='Canada') %>% 
-              unnest_longer(categories), 
-            by=c('year' = 'year', 'regulation_category' = 'categories'))
-
-
+# Canada regulations and their corresponding mtco2 values for that given year
 canada_regulations <- regulations %>% 
   filter(country == 'Canada') %>% 
   unnest_longer(categories) %>% 
-  left_join(canada_category_mappings, by=c('categories' = 'regulation_category'))
-
+  left_join(canada_category_mappings, by=c('categories' = 'regulation_category')) %>% 
+  left_join(canada_ghg_emissions, by=c('year' = 'year', 'canada_category' = 'category'))
 
 
 # Display time series of canada ghg emission per subsector, along with corresponding regulations
-p <- canada_ghg_emissions %>% 
-  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e')
+canada_ghg_emissions %>% 
   mutate(category = str_remove(category, '_megatonnes_of_carbon_dioxide_equivalent')) %>% 
   mutate(category = str_replace_all(category, '_', ' ')) %>% 
   ggplot(aes(x=year, y=mt_co2e)) +
   geom_line(aes(colour=category)) +
   geom_point(
-    data = ,
-    aes(
-    )
+    data = canada_regulations,
+    aes(x = year, y = mt_co2e)
+  ) +
+  geom_label_repel(
+    data = canada_regulations,
+    aes(x = year, y = mt_co2e, label = name),
+    segment.size = .1
   ) +
   labs(
-    title = 'Canada GHG emissions per subsector',
+    title = 'Canada GHG emissions per subsector and corresponding regulations',
     x = 'Year',
     y = 'GHG emissions (megatonnes of CO2 equivalent)',
     colour = 'Category'
   ) +
   theme_hc()
-ggplotly(p)
 
 
 
