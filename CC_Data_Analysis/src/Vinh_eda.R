@@ -55,15 +55,16 @@ value_per_activity <-
 #   unnest(cols = c(data))
 
 
+# Who are biggest producers of GHG ----------------------------------------
+
+# TODO: Use data from kaggle from united nations instead
+
+
 # Load green house emissions data
 country_ghg_emissions <- 
   read_csv('data/raw/CAIT-Country-GHG-Emissions.csv', skip=2) %>% 
   clean_names()
 
-
-
-
-# Who are biggest producers of GHG ----------------------------------------
 
 # Avg emissions of all types per country
 country_avg_emissions <- country_ghg_emissions %>% 
@@ -101,26 +102,26 @@ countries_of_interest <-
     'United States',
     'China',
     'India',
-    'Japan',
-    'Brazil',
+    # 'Japan',
+    # 'Brazil',
     'Canada'
   )
 
-# GHG emissions for top 20 countries over time
-p <- country_avg_emissions %>% 
-  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>% 
-  top_n(20, wt=avg_ghg_emissions) %>% 
-  select(country) %>% 
-  inner_join(country_ghg_emissions,by='country') %>% 
-  ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
-  geom_line() +
-  labs(
-    title = 'GHG emission per country',
-    y= 'GHG emission (MtCO2e)',
-    x = 'Year',
-    colour = 'Country'
-  )
-ggplotly(p)
+# # GHG emissions for top 20 countries over time
+# p <- country_avg_emissions %>% 
+#   rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>% 
+#   top_n(20, wt=avg_ghg_emissions) %>% 
+#   select(country) %>% 
+#   inner_join(country_ghg_emissions,by='country') %>% 
+#   ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
+#   geom_line() +
+#   labs(
+#     title = 'GHG emission per country',
+#     y= 'GHG emission (MtCO2e)',
+#     x = 'Year',
+#     colour = 'Country'
+#   )
+# ggplotly(p)
 
 
 # GHG emissions for countries of interest only
@@ -143,13 +144,15 @@ ggplotly(p)
 "Let's go through each country of India, China, US, Canada. Individually
 Assumptions, the categories and sectored described by the different files refer to the same set of activities"
 
-
+# TODO: Figure out way to cleanly store this as a tibble
 regulations <- read_csv('data/raw/law_search/data.csv') %>% 
   clean_names() %>% 
   rename(year = year_passed) %>% 
+  mutate(categories = str_to_lower(categories)) %>% 
+  mutate(categories = str_replace_all(categories, '; ', ';')) %>% 
   mutate(categories = str_split(categories, ';'))
   
-category_types <- regulations %>% 
+regulation_category_types <- regulations %>% 
   select(categories) %>% 
   unlist() %>% 
   str_trim() %>% 
@@ -167,7 +170,7 @@ common_categories <-
   )
 
 
-## Canada
+# Effects of Regulations - Canada -----------------------------------------
 
 'Within the remit of this law, the Government announced the introduction of the clean fuel standard regulatory framework to 
 achieve 30 megatonnes of annual reductions in GHG emissions by 2030, contributing to Canada’s effort to achieve its overall
@@ -175,16 +178,63 @@ GHG mitigation target of 30% emission reduction below 2005 levels by 2030.
 
 We can check to see if Canada did even meet its goals'
 
+# Data from Stats Can, most likely the best data for Canada GHG Emissions
+# TODO: find a way to replace mt_co2e in all column names
+canada_ghg_emissions <- read_csv('data/raw/GHG-emissions-sector-en.csv', skip=2) %>% 
+  clean_names() %>% 
+  filter(!str_detect(year, 'Note|Source|Available')) %>% 
+  mutate(year = as.integer(year))
 
-regulations %>% 
+# NOTE: Oil and gas is equivalent to carbon pricing?
+canada_category_mappings <- 
+  tribble(
+    ~canada_category, ~regulation_category,
+    'oil_and_gas_megatonnes_of_carbon_dioxide_equivalent', 'carbon pricing',
+    'transportation_megatonnes_of_carbon_dioxide_equivalent', 'transportation',
+    'buildings_megatonnes_of_carbon_dioxide_equivalent', 'buildings',
+    'electricity_megatonnes_of_carbon_dioxide_equivalent', 'energy',
+    'heavy_industry_megatonnes_of_carbon_dioxide_equivalent', 'industry',
+    'waste_and_others_megatonnes_of_carbon_dioxide_equivalent', 'waste'
+  )
+
+
+# NOTE: One extra row because there were two laws that were passed in 2010 both under transportation
+canada_ghg_emissions_and_regulations <- canada_ghg_emissions %>% 
+  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e') %>% 
+  left_join(canada_category_mappings, by=c('category' = 'canada_category')) %>% 
+  left_join(regulations %>% 
+              filter(country=='Canada') %>% 
+              unnest_longer(categories), 
+            by=c('year' = 'year', 'regulation_category' = 'categories'))
+
+
+canada_regulations <- regulations %>% 
   filter(country == 'Canada') %>% 
-  inner_join(country_ghg_emissions, by='country') %>% 
-  ggplot(aes(x=))
-  
+  unnest_longer(categories) %>% 
+  left_join(canada_category_mappings, by=c('categories' = 'regulation_category'))
 
 
 
-
+# Display time series of canada ghg emission per subsector, along with corresponding regulations
+p <- canada_ghg_emissions %>% 
+  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e')
+  mutate(category = str_remove(category, '_megatonnes_of_carbon_dioxide_equivalent')) %>% 
+  mutate(category = str_replace_all(category, '_', ' ')) %>% 
+  ggplot(aes(x=year, y=mt_co2e)) +
+  geom_line(aes(colour=category)) +
+  geom_point(
+    data = ,
+    aes(
+    )
+  ) +
+  labs(
+    title = 'Canada GHG emissions per subsector',
+    x = 'Year',
+    y = 'GHG emissions (megatonnes of CO2 equivalent)',
+    colour = 'Category'
+  ) +
+  theme_hc()
+ggplotly(p)
 
 
 
