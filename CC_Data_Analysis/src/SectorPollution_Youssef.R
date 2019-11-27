@@ -6,6 +6,8 @@ library(tidyr)
 library(readxl)
 library(janitor)
 library(ggplot2)
+install.packages("ggfortify")
+library(ggfortify)
 library(skimr)
 library(stringr)
 library(ggrepel)
@@ -31,19 +33,6 @@ emission_tax_filename <- "data/raw/emission_tax.csv"
 empl_per_act_filename <- "data/raw/employment_per_act.csv"
 
 # SECTOR DEFINITION (Source: http://fenixservices.fao.org/faostat/static/documents/EM/EM_e.pdf )
-
-# Energy (energy, manufacturing and construction industries and fugitive emissions): 
-# emissions are inclusive of public heat and electricity production; 
-# other energy industries; fugitive emissions from solid fuels, oil and gas, manufacturing industries and construction.
-# Transport: domestic aviation, road transportation, rail transportation, domestic navigation, other transportation.
-# International bunkers: international aviation; international navigation/shipping.
-# Residential, commercial, institutional and AFF: Residential and other sectors.
-# Industry (industrial processes and product use):
-# production of minerals, chemicals, metals, pulp/paper/food/drink, halocarbons, refrigeration and air conditioning; aerosols and solvents; semicondutor/electronics manufacture; electrical equipment.
-# Waste: solid waste disposal; wastewater handling; waste incineration; other waste handling.
-# Agriculture: methane and nitrous oxide emissions from enteric fermentation; manure management; rice cultivation; synthetic fertilizers; manure applied to soils; manure left on pasture; crop residues; burning crop residues, savanna and cultivation of organic soils.
-# Land use: emissions from the net conversion of forest; cropland; grassland and burning biomass for agriculture or other uses.
-# Other sources: fossil fuel fires; indirect nitrous oxide from non-agricultural NOx and ammonia; other anthropogenic sources
 
 # CO2 per sector
 co2_per_sect <- "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
@@ -122,6 +111,7 @@ countries_df <- unique(coun_ava_df$location)
 countries_df
 
 # Add columns to emission data frame to convene to GDP growth per sector df
+# TODO : Add columns for all sectors not just agriculture
 ce_df <- ce_df %>% 
   mutate(agriculture_em = agriculture_mt_co2e) 
 
@@ -138,11 +128,10 @@ country_avg_emissions <- ce_df %>%
 
 ce_df_freq <- data.frame(table(ce_df$country))
 
-# Avg emission for all GHG (in tonnes of ghg)
-ghg_avg_emissions -> ghg_emission %>% 
-  group_by(entity) 
+# Avg emission for all GHG (in tonnes of ghg) [Missing years]
+# ghg_avg_emissions -> ghg_emission %>% 
+#   group_by(entity) 
 
-year_freq <- data.frame(table(ghg_emission$entity))
   
   
 
@@ -176,8 +165,8 @@ countries_of_interest <-
 
 
 # Measure used should be Percent of total tax
-env_tot_tax_df <- env_tax_df %>% 
-  filter(measure == "PC_TOT_TAX")
+# env_tot_tax_df <- env_tax_df %>% 
+#   filter(measure == "PC_TOT_TAX")
   
 
 # PC(?percent?) value 
@@ -189,7 +178,7 @@ growth_added <- coun_ava_df %>%
   filter(measure == "AGRWTH")
 
 
-# Per Activity Value added DF(global value added per year)
+# Per Activity Growth Added DF(total growth added per year per country)
 int_ava_df <- growth_added %>% 
   dplyr::group_by(activity, year) %>% 
   dplyr::summarise(average_val = mean(value))
@@ -232,7 +221,7 @@ em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "
 
 # Agriculture and Fishery Growth Contribution
 
-agr_growth_df <- em_growth_merged_df %>% 
+agr_growth_em_df <- em_growth_merged_df %>% 
   filter(activity == "Agriculture and Fishery")
 
 # "Other" Tax revenue (TO NOT BE USED ?YET?)
@@ -242,7 +231,7 @@ agr_growth_df <- em_growth_merged_df %>%
 #   rename("total_env_tax" = "value")
 
 
-aus_growth_em <- agr_growth_df %>% filter(country == "Australia")
+aus_growth_em <- agr_growth_em_df %>% filter(country == "Australia")
 
 # First let's assume that Value added and environmental tax are independent to one another
 # to perform Pearson corelation test
@@ -266,6 +255,24 @@ qqline(aus_growth_em$agriculture_em)
 cor.test(aus_growth_em$value, aus_growth_em$agriculture_em, method = "pearson", data=aus_val_tax)
 
 # Output -> Non Significant negative corelation
+
+# Let's plot two time series 
+
+# one for Added growth wrt years
+Agriculture_Growth_TimeSeries <- ts(aus_growth_em$value, start = 1990)
+Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_em, start = 1990)
+bound_ts <- cbind(Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries)
+autoplot(bound_ts, facets=TRUE) +
+  xlab("Year") + ylab("") +
+  ggtitle("Time Series for Australian Agricultural Subsector")
+
+scatter_ts_plot <- 
+  qplot(Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries, data=as.data.frame(bound_ts)) +
+  ylab("Emission (mtCO2)") + xlab("Added Growth")
+
+# Cross corelation testing for time series
+
+
 
 # Australia value added per year for Agriculture Sector
 aus_val_tax %>%
