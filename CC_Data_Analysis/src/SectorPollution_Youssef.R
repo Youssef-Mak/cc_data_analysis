@@ -67,7 +67,12 @@ processCsvData <- function(csv_filename) {
 # Employment per activity filename
 empl_per_act_df <- processCsvData(empl_per_act_filename)
 
-# Country Emission DF
+# Country Emission DF (Total GHG)
+# Don't worry about negative emissions : https://www.nrcan.gc.ca/our-natural-resources/forests-forestry/state-canadas-forests-report/how-does-disturbance-shape-canad/indicator-carbon-emissions-removals/16552
+ghg_emission <- processCsvData(gge_per_sect) %>% 
+  mutate(emission_sum = rowSums(.[3:12]))
+
+# Country Emission DF (mtCO2)
 ce_df <-  read.csv(country_emissions_filename, skip=2) %>% 
   clean_names()
 
@@ -116,15 +121,32 @@ countries_ce
 countries_df <- unique(coun_ava_df$location)
 countries_df
 
+# Add columns to emission data frame to convene to GDP growth per sector df
+ce_df <- ce_df %>% 
+  mutate(agriculture_em = agriculture_mt_co2e) 
+
+  
+
 # Get Countries of Interest
 
-# Avg emissions of all types per country
+# Avg emissions of all types per country (mtCO2)
 country_avg_emissions <- ce_df %>% 
   select(-year) %>% 
   filter(country != 'World', !str_detect(country, 'European Union')) %>% 
   group_by(country) %>% 
   summarise_each(list(mean = mean))
 
+ce_df_freq <- data.frame(table(ce_df$country))
+
+# Avg emission for all GHG (in tonnes of ghg)
+ghg_avg_emissions -> ghg_emission %>% 
+  group_by(entity) 
+
+year_freq <- data.frame(table(ghg_emission$entity))
+  
+  
+
+ 
 
 # Barplot of top 20 countries avg ghg emission
 country_avg_emissions %>% 
@@ -140,7 +162,7 @@ country_avg_emissions %>%
   ) +
   theme_hc()
 
-# Thus 
+# Thus these our countries of interest
 countries_of_interest <-
   tribble(
     ~country,
@@ -159,19 +181,21 @@ env_tot_tax_df <- env_tax_df %>%
   
 
 # PC(?percent?) value 
-pc_val_added <- coun_ava_df %>% 
-  filter(measure == "PC_VA")
+# pc_val_added <- coun_ava_df %>% 
+  # filter(measure == "PC_VA")
 
 # AGRWTH value 
-agrwth_val_added <- coun_ava_df %>% 
+growth_added <- coun_ava_df %>% 
   filter(measure == "AGRWTH")
 
 
 # Per Activity Value added DF(global value added per year)
-int_ava_df <- pc_val_added %>% 
+int_ava_df <- growth_added %>% 
   dplyr::group_by(activity, year) %>% 
   dplyr::summarise(average_val = mean(value))
 
+
+# Start with different subsectors for same country 
 
 # International Average value added per year
 int_ava_df %>%
@@ -193,54 +217,55 @@ int_ava_df %>%
   )
 
 # Per Average Value added DF(global value added per year)
-coun_ava_df <- pc_val_added %>% 
+coun_ava_df <- growth_added %>% 
   dplyr::group_by(location, activity, year)
   # %>% dplyr::summarise(average_val = mean(value))
   
-# Emission and value added merged df
-em_act_val_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "location", "year" = "year"))
+# Emission and growth per sector merged df
+em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "location", "year" = "year")) 
 
-# Environmental tax and value added merged df
-env_tax_merged_df <- dplyr::left_join(env_tax_df, coun_ava_df, by = c("location" = "location", "year" = "year"))
+# Emission and Env tax merged df (TO NOT BE USED ?YET?)
+# em_envtax_merged_df <- dplyr::left_join(ce_df, env_tot_tax_df, by = c("country" = "location", "year" = "year"))
 
-agr_val_added_df <- pc_val_added %>% 
+# Environmental tax and value added merged df (TO NOT BE USED ?YET?)
+# env_tax_merged_df <- dplyr::left_join(env_tax_df, coun_ava_df, by = c("location" = "location", "year" = "year"))
+
+# Agriculture and Fishery Growth Contribution
+
+agr_growth_df <- em_growth_merged_df %>% 
   filter(activity == "Agriculture and Fishery")
 
-agr_tax_df <- env_tot_tax_df %>% 
-  filter(subject == "Other") %>% 
-  select(c("location", "value", "year")) %>% 
-  rename("total_env_tax" = "value")
-
-merged_agr_df <- dplyr::left_join(agr_val_added_df, agr_tax_df, by = c("location" =  "location", "year" = "year")) %>% 
-  na.omit()
+# "Other" Tax revenue (TO NOT BE USED ?YET?)
+# oth_tax_df <- env_tot_tax_df %>% 
+#   filter(subject == "Other") %>% 
+#   select(c("location", "value", "year")) %>% 
+#   rename("total_env_tax" = "value")
 
 
-
-aus_val_tax <- merged_agr_df %>% filter(location == "Australia")
+aus_growth_em <- agr_growth_df %>% filter(country == "Australia")
 
 # First let's assume that Value added and environmental tax are independent to one another
 # to perform Pearson corelation test
 # We also assume there is a linear relationship between the two
 
 # Assume That both variables are continuous and linearly related (appears linear barring outliers)
-plot(aus_val_tax$value, aus_val_tax$total_env_tax)
+plot(aus_growth_em$value, aus_growth_em$agriculture_em)
 
 # Assume variables follow a bivariate normal distribution
-qqnorm(aus_val_tax$value)
-qqline(aus_val_tax$value)
+qqnorm(aus_growth_em$value)
+qqline(aus_growth_em$value)
 
-qqnorm(aus_val_tax$total_env_tax)
-qqline(aus_val_tax$total_env_tax)
+qqnorm(aus_growth_em$agriculture_em)
+qqline(aus_growth_em$agriculture_em)
 
 # Assume variances are homogeneous (no cone shape scatter plot)
 
 # No Major outliers (check scatter plot)
 
-# Corelation
+# Correlation test
+cor.test(aus_growth_em$value, aus_growth_em$agriculture_em, method = "pearson", data=aus_val_tax)
 
-cor.test(aus_val_tax$value, aus_val_tax$total_env_tax, method = "pearson", data=aus_val_tax)
-# Significant negative corelation
-
+# Output -> Non Significant negative corelation
 
 # Australia value added per year for Agriculture Sector
 aus_val_tax %>%
