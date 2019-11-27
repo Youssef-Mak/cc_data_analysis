@@ -12,6 +12,9 @@ library(skimr)
 library(stringr)
 library(ggrepel)
 
+install.packages("tseries")
+library(tseries)
+
 install.packages("countrycode")
 library(countrycode)
 
@@ -271,6 +274,48 @@ scatter_ts_plot <-
   ylab("Emission (mtCO2)") + xlab("Added Growth")
 
 # Cross corelation testing for time series
+
+# First test for stationarity (the way the time series changes does not change over time)
+
+adf.test(Agriculture_Growth_TimeSeries) # Low p-value indicating stationary
+
+kpss.test(Agriculture_Growth_TimeSeries) # High p-value indicating non-trend-stationary
+
+adf.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-stationary
+
+kpss.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-trend-stationary
+
+diff_agr_grwt_ts <- diff(Agriculture_Growth_TimeSeries)
+
+diff_agr_em_ts <- diff(Agriculture_Emission_TimeSeries)
+
+# Re-test for Stationarity
+
+diff_agr_grwt_ts %>% diff() %>% adf.test() # Low p-value indicating stationary
+
+diff_agr_grwt_ts %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+
+diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() 
+
+# growth IS Trend-Stationary
+
+diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating non-stationary
+
+diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+
+diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
+
+# Emission is growth stationary
+
+# Cross correlation
+
+ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
+# Negatively correlated in -2 lag
+# Positively correlated in -1 and -3 lag
+# Not sure if i took differencing into account TODO: apply ARIMA MOdel
+
+
+
 
 
 
