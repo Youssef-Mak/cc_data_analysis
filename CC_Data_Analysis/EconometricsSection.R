@@ -29,15 +29,13 @@ Emissions <- Econometrics  %>% select(contains("emissions"),year,country_code)
 
 CountryNames <- read_excel("data/raw/WDIEXCEL.xlsx",sheet = "Country") %>% 
   clean_names() %>% 
-  select(country_code,region) %>%
+  select(country_code,region,short_name) %>%
   na.omit()
 
 Econometrics <- Econometrics %>% inner_join(CountryNames,by = c("country_code"="country_code")) %>%
   inner_join(Emissions,by = c("country_code"="country_code","year"="year")) %>% 
   mutate(year = paste0(year,"/01","/01")) %>%
-  mutate(year = as.Date(year,"%Y/%m/%d"))  %>% 
-  BBmisc::normalize(method = "standardize", 
-                    margin = 2)
+  mutate(year = as.Date(year,"%Y/%m/%d"))  
                                                    
 
 set.seed(0)
@@ -59,9 +57,11 @@ WorldCCF <-   WorldDamageEmissions %>% group_split(country_code)
 
 GenerateCCF <- function(CountryTibble,emptyCCFList){
   country <- CountryTibble$country_code[[1]]
+  
   significanceLevel <- 2 / sqrt(nrow(CountryTibble))
   tempCCF <- ccf(CountryTibble$adjusted_savings_particulate_emission_damage_percent_of_gni,
-                 CountryTibble$total_greenhouse_gas_emissions_kt_of_co2_equivalent)
+                 CountryTibble$total_greenhouse_gas_emissions_kt_of_co2_equivalent,
+                 plot = FALSE)
   tempCCFLevels <- tibble(lag = as.vector(tempCCF$lag),
                           acf = as.vector(tempCCF$acf)) %>% filter(abs(acf) >= significanceLevel) 
   SigRelationship <- nrow(tempCCFLevels) > 0
@@ -75,11 +75,16 @@ GenerateCCF <- function(CountryTibble,emptyCCFList){
                              PosSigRelation = PosSigRelationship
                              )
   emptyCCFList <- list()
+  tempCCF$snames <-paste0("Particulate damage and greenhouse gas emissions cross correlation for country:",
+                                   country)
   emptyCCFList[[length(emptyCCFList) + 1]]<-(list(tempCCF,country))
   return(list(CCFRelationships,emptyCCFList))
 }
+
 GetCCFRelationshipsFromWorld <- function(worldData){return(worldData[[1]])}
 GetCCFObjectsFromWorld <- function(worldData){return(worldData[[2]])}
 WorldResults <-  lapply(WorldCCF,FUN = GenerateCCF)
 Relationships<- lapply(WorldResults,FUN = GetCCFRelationshipsFromWorld) %>% bind_rows()
 CCFPerCountry<- lapply(WorldResults,FUN = GetCCFObjectsFromWorld)
+
+test <- Relationships%>% right_join(CountryNames, by = c("country_code" = "country_code"))
