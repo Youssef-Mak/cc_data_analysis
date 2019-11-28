@@ -1,6 +1,7 @@
 # Load libraries
 library(countrycode)
 library(ggrepel)
+library(fable)
 library(ggthemes)
 library(janitor)
 library(lubridate)
@@ -8,6 +9,7 @@ library(plotly)
 library(plyr)
 library(skimr)
 library(tidyverse)
+library(tsibble)
 
 # Load and clean value per activity data from data.oecd
 subject_mappings <- tribble(
@@ -96,46 +98,98 @@ Could also include Brazil, Indonesia, Japan"
 # TODO: Possibly the rest of the analysis will be purely based on GHG emission as it covers several different types of waste
 
 
-countries_of_interest <-
-  tribble(
-    ~country,
-    'United States',
-    'China',
-    'India',
-    # 'Japan',
-    # 'Brazil',
-    'Canada'
-  )
+# countries_of_interest <-
+#   tribble(
+#     ~country,
+#     'United States',
+#     'China',
+#     'India',
+#     # 'Japan',
+#     # 'Brazil',
+#     'Canada'
+#   )
 
-# # GHG emissions for top 20 countries over time
-# p <- country_avg_emissions %>% 
-#   rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>% 
-#   top_n(20, wt=avg_ghg_emissions) %>% 
-#   select(country) %>% 
+# GHG emissions for top 20 countries over time
+p <- country_avg_emissions %>%
+  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>%
+  top_n(20, wt=avg_ghg_emissions) %>%
+  select(country) %>%
+  inner_join(country_ghg_emissions,by='country') %>%
+  ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
+  geom_line() +
+  labs(
+    title = 'GHG emission per country',
+    y= 'GHG emission (MtCO2e)',
+    x = 'Year',
+    colour = 'Country'
+  )
+ggplotly(p)
+
+
+# # GHG emissions for countries of interest only
+# p <- countries_of_interest %>% 
 #   inner_join(country_ghg_emissions,by='country') %>% 
 #   ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
 #   geom_line() +
 #   labs(
 #     title = 'GHG emission per country',
-#     y= 'GHG emission (MtCO2e)',
+#     y = 'GHG emission (MtCO2e)',
 #     x = 'Year',
 #     colour = 'Country'
 #   )
 # ggplotly(p)
 
 
-# GHG emissions for countries of interest only
-p <- countries_of_interest %>% 
-  inner_join(country_ghg_emissions,by='country') %>% 
-  ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
-  geom_line() +
+
+
+# Kyoto Protocol  ---------------------------------------------------------
+kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
+
+
+# Check worldwide effect
+world_ghg_emissions_ts <- country_ghg_emissions %>% 
+  filter(country == 'World') %>% 
+  select(year, total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  rename(value = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  as_tsibble(index=year)
+
+world_ghg_emissions_post <- world_ghg_emissions_ts %>% filter(year >= kyoto_protocol_effective_date['start'] %>% year(),
+                                                              year < kyoto_protocol_effective_date['end'] %>% year)
+
+
+p <- world_ghg_emissions_ts %>% 
+  autoplot(value) +
+  geom_point() +
+  geom_vline(xintercept=kyoto_protocol_effective_date['start'] %>% year(), linetype='dashed') +
+  geom_vline(xintercept=kyoto_protocol_effective_date['end'] %>% year(), linetype='dashed') +
   labs(
-    title = 'GHG emission per country',
-    y = 'GHG emission (MtCO2e)',
+    title = 'World GHG emissions',
     x = 'Year',
-    colour = 'Country'
+    y = 'GHG emissions (megatonnes of co2 equivalent)'
   )
 ggplotly(p)
+
+
+## Intervention analysis. 
+
+# Decreasing acf indicated trend, no seasonility patterns obvious. Seems to match what the plot above shows
+ggAcf(world_ghg_emissions_ts) +
+  labs(title = 'World GHG emissions ACF')
+
+# Arima on time period before kyoto protocol effective date. 
+world_ghg_arima <- auto.arima(world_ghg_emissions_ts %>% filter(year < kyoto_protocol_effective_date['start'] %>% year()))
+
+# No obvious patterns in ACF, residuals seem almost normal. Residuals also look like white noise, thought here is a big dip at 20
+world_ghg_arima %>% checkresiduals()
+
+# Set h based on kyoto protocol effective dates
+forecasts <- forecast(world_ghg_arima, h=8)
+forecasts_kyoto <- forecasts$mean %>% as_tsibble() %>% rename(year=index)
+
+# Plot actual with forecasts
+p +
+  geom_line(data=forecasts_kyoto, colour='red') +
+  geom_point(data=forecasts_kyoto, colour='red')
 
 
 
@@ -172,7 +226,6 @@ regulation_category_types <- regulations %>%
 #     'Transportation', 'transportation_mt_co2 (also part of energy)',
 #   )
 
-
 # Effects of Regulations - Canada -----------------------------------------
 
 'Within the remit of this law, the Government announced the introduction of the clean fuel standard regulatory framework to 
@@ -187,7 +240,9 @@ canada_ghg_emissions <- read_csv('data/raw/GHG-emissions-sector-en.csv', skip=2)
   clean_names() %>% 
   filter(!str_detect(year, 'Note|Source|Available')) %>% 
   mutate(year = as.integer(year)) %>% 
-  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e')
+  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e') %>% 
+  as_tsibble(key=category, index=year) %>% 
+  fill_gaps(.full=TRUE)
 
 # NOTE: Oil and gas is equivalent to carbon pricing?
 canada_category_mappings <- 
@@ -210,7 +265,7 @@ canada_regulations <- regulations %>%
 
 
 # Display time series of canada ghg emission per subsector, along with corresponding regulations
-canada_ghg_emissions %>% 
+p <- canada_ghg_emissions %>% 
   mutate(category = str_remove(category, '_megatonnes_of_carbon_dioxide_equivalent')) %>% 
   mutate(category = str_replace_all(category, '_', ' ')) %>% 
   ggplot(aes(x=year, y=mt_co2e)) +
@@ -219,18 +274,72 @@ canada_ghg_emissions %>%
     data = canada_regulations,
     aes(x = year, y = mt_co2e)
   ) +
-  geom_label_repel(
-    data = canada_regulations,
-    aes(x = year, y = mt_co2e, label = name),
-    segment.size = .1
-  ) +
+  # geom_text_repel(
+  #   data = canada_regulations,
+  #   aes(x = year, y = mt_co2e, label = name),
+  #   size = 2
+  # ) +
   labs(
-    title = 'Canada GHG emissions per subsector and corresponding regulations',
+    title = 'Canada GHG emissions per subsector',
     x = 'Year',
     y = 'GHG emissions (megatonnes of CO2 equivalent)',
     colour = 'Category'
   ) +
   theme_hc()
+ggplotly(p)
+
+
+"Most of the regulations focus on electricity, transportation and oil and gas"
+
+
+# Canada - Electricity ----------------------------------------------------
+canada_electricity_ghg <- canada_ghg_emissions %>% 
+  filter(str_detect(category, 'electricity')) %>% 
+  select(-category)
+
+# Ignoring certain regulations based on what they actually do. The ones below simply establish some agency 
+canada_regulations_ignore <- c("Canada Foundation for Sustainable Development Technology Act (S.C. 2001, c. 23)", 
+                               "Canada Emission Reduction Incentives Agency Act (S.C. 2005, c. 30, s. 87)")
+
+# Filter for energy regulations and only for those that matter
+canada_energy_regulations <- canada_regulations %>% 
+  filter(categories == 'energy', !(name %in% electricity_regulations_ignore)) %>% 
+  arrange(year)
+
+# Plot ghg emission with regulation names
+canada_electricity_ghg %>% 
+  ggplot(aes(x=year, y=mt_co2e)) +
+  geom_line() +
+  geom_point(
+    data = canada_energy_regulations,
+    aes(x=year, y=mt_co2e)
+  ) +
+  geom_text_repel(
+    data = canada_energy_regulations,
+    aes(x=year, y=mt_co2e, label=name)
+  ) +
+  labs(
+    title = 'Canada GHG emission from electricity and corresponding regulations',
+    x = 'Year',
+    y = 'GHG emission (megatonnes of CO2 equivalent)'
+  ) +
+  theme_minimal()
+
+# Check acf, decreasing trend thus there is just a trend and no seasonality from the data 
+# NOTE: Might need more data, or enough data to capture seasonality. However, based on what we know, there doesn't seem like
+# there would be any seasonality. I would expect to see it across 12 months however our data is yearly
+acf(canada_electricity_ghg)
+
+
+# References https://newonlinecourses.science.psu.edu/stat510/lesson/9/9.2
+# For the Intervention analysis we will assume that the regulation/policy was enabled that given year, and also
+# The response is immediate
+electriciy_arima_1 <- canada_electricity_ghg %>% 
+  filter(year < canada_energy_regulations$year[1]) %>% 
+  as_tsibble(index=year) %>% 
+  model(arima = ARIMA(mt_co2e))
+
+
 
 
 

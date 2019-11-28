@@ -1,0 +1,206 @@
+---
+title: "Regulations on GHG emissions"
+subtitle: ''
+author: "Shadow Dogs Unleashed"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: True
+    toc_float: True
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+
+# Set some options
+knitr::opts_chunk$set(echo = TRUE, fig.height = 6, fig.width = 10)
+skimr::skim_with(numeric = list(hist = NULL))
+
+# load libraries
+library(countrycode)
+library(ggrepel)
+library(ggthemes)
+library(janitor)
+library(lubridate)
+library(plotly)
+library(plyr)
+library(skimr)
+library(tidyverse)
+```
+
+
+# Who are the biggest producers of GHG
+
+```{r, warning=FALSE, message=FALSE}
+# Load green house emissions data
+country_ghg_emissions <- 
+  read_csv('../data/raw/CAIT-Country-GHG-Emissions.csv', skip=2) %>% 
+  clean_names()
+
+# Avg emissions of all types per country
+country_avg_emissions <- country_ghg_emissions %>% 
+  select(-year) %>% 
+  filter(country != 'World', !str_detect(country, 'European Union')) %>% 
+  group_by(country) %>% 
+  summarise_each(list(mean = mean))
+
+# Barplot of top 20 countries avg ghg emission
+country_avg_emissions %>% 
+  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>% 
+  top_n(20, wt=avg_ghg_emissions) %>% 
+  ggplot(aes(reorder(country, avg_ghg_emissions), avg_ghg_emissions)) +
+  geom_bar(stat='identity') +
+  coord_flip() + 
+  labs(
+    title = 'Top 20 countries based on their average GHG emissions',
+    x = 'Country',
+    y = 'Average GHG emission per year (MtCO2e)'
+  ) +
+  theme_hc()
+```
+
+From the plot above, US and China are by far the heaviest producers of GHG. Thus we will limit our analysis to US, China, India and Canada.
+
+```{r, message=FALSE, warning=FALSE}
+countries_of_interest <-
+  tribble(
+    ~country,
+    'United States',
+    'China',
+    'India',
+    'Canada'
+  )
+
+# GHG emissions for countries of interest only
+p <- countries_of_interest %>% 
+  inner_join(country_ghg_emissions,by='country') %>% 
+  ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = 'GHG emission per country',
+    y = 'GHG emission (MtCO2e)',
+    x = 'Year',
+    colour = 'Country'
+  )
+ggplotly(p)
+```
+
+The above graph displays the ghg emissions over time for our countries of interest. China has climbed greatly over the last decade while the other countries don't seem to have changed as much.
+
+
+
+# Do regulations have an impact on ghg emissions?
+
+For this analysis, we will be going through each country individually, starting with Canada.
+
+```{r, warning=FALSE, message=FALSE}
+# TODO: Figure out way to cleanly store this as a tibble
+regulations <- read_csv('../data/raw/law_search/data.csv') %>% 
+  clean_names() %>% 
+  rename(year = year_passed) %>% 
+  mutate(categories = categories %>% 
+           str_to_lower() %>% 
+           str_replace_all('energy supply|energy demand', 'energy') %>% 
+           str_replace_all('; ', ';') %>% 
+           str_split(';')) %>% 
+  mutate(categories = map(categories, unique))
+  
+regulation_category_types <- regulations %>% 
+  select(categories) %>% 
+  unlist() %>% 
+  str_trim() %>% 
+  unique()
+
+# Data from Stats Can, most likely the best data for Canada GHG Emissions
+# TODO: find a way to replace mt_co2e in all column names
+canada_ghg_emissions <- read_csv('../data/raw/GHG-emissions-sector-en.csv', skip=2) %>% 
+  clean_names() %>% 
+  filter(!str_detect(year, 'Note|Source|Available')) %>% 
+  mutate(year = as.integer(year)) %>% 
+  pivot_longer(cols=-year, names_to='category', values_to='mt_co2e')
+
+# NOTE: Oil and gas is equivalent to carbon pricing?
+canada_category_mappings <- 
+  tribble(
+    ~canada_category, ~regulation_category,
+    'oil_and_gas_megatonnes_of_carbon_dioxide_equivalent', 'carbon pricing',
+    'transportation_megatonnes_of_carbon_dioxide_equivalent', 'transportation',
+    'buildings_megatonnes_of_carbon_dioxide_equivalent', 'buildings',
+    'electricity_megatonnes_of_carbon_dioxide_equivalent', 'energy',
+    'heavy_industry_megatonnes_of_carbon_dioxide_equivalent', 'industry',
+    'waste_and_others_megatonnes_of_carbon_dioxide_equivalent', 'waste'
+  )
+
+# Canada regulations and their corresponding mtco2 values for that given year
+canada_regulations <- regulations %>% 
+  filter(country == 'Canada') %>% 
+  unnest_longer(categories) %>% 
+  left_join(canada_category_mappings, by=c('categories' = 'regulation_category')) %>% 
+  left_join(canada_ghg_emissions, by=c('year' = 'year', 'canada_category' = 'category'))
+
+# Display time series of canada ghg emission per subsector, along with corresponding regulations
+p <- canada_ghg_emissions %>% 
+  mutate(category = str_remove(category, '_megatonnes_of_carbon_dioxide_equivalent')) %>% 
+  mutate(category = str_replace_all(category, '_', ' ')) %>% 
+  ggplot(aes(x=year, y=mt_co2e)) +
+  geom_line(aes(colour=category)) +
+  geom_point(
+    data = canada_regulations,
+    aes(x = year, y = mt_co2e)
+  ) +
+  # geom_text_repel(
+  #   data = canada_regulations,
+  #   aes(x = year, y = mt_co2e, label = name),
+  #   size = 3
+  # ) +
+  labs(
+    title = 'Canada GHG emissions per subsector and corresponding regulations',
+    x = 'Year',
+    y = 'GHG emissions (megatonnes of CO2 equivalent)',
+    colour = 'Category'
+  ) +
+  theme_hc()
+ggplotly(p)
+```
+
+## Electricity
+```{r, warning=FALSE, message=FALSE}
+canada_electricity_ghg <- canada_ghg_emissions %>% 
+  filter(str_detect(category, 'electricity')) %>% 
+  select(-category)
+
+# Plot ghg emission with regulation names
+canada_electricity_ghg %>% 
+  ggplot(aes(x=year, y=mt_co2e)) +
+  geom_line() +
+  geom_point(
+    data = canada_regulations %>% filter(categories == 'energy'),
+    aes(x=year, y=mt_co2e)
+  ) +
+  geom_text_repel(
+    data = canada_regulations %>% filter(categories == 'energy'),
+    aes(x=year, y=mt_co2e, label=name)
+  ) +
+  labs(
+    title = 'Canada GHG emission from electricity and corresponding regulations',
+    x = 'Year',
+    y = 'GHG emission (megatonnes of CO2 equivalent)'
+  ) +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+
+# Appendix: sessionInfo
+
+```{r}
+sessionInfo()
+```
+
