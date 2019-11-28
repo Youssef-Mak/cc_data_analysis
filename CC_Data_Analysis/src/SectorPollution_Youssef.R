@@ -12,6 +12,13 @@ library(skimr)
 library(stringr)
 library(ggrepel)
 
+install.packages("tidyverse")
+library(tidyverse)
+
+install.packages("tsibble")
+library(tsibble)
+
+
 install.packages("tseries")
 library(tseries)
 
@@ -170,11 +177,7 @@ countries_of_interest <-
 # Measure used should be Percent of total tax
 # env_tot_tax_df <- env_tax_df %>% 
 #   filter(measure == "PC_TOT_TAX")
-  
 
-# PC(?percent?) value 
-# pc_val_added <- coun_ava_df %>% 
-  # filter(measure == "PC_VA")
 
 # AGRWTH value 
 growth_added <- coun_ava_df %>% 
@@ -214,24 +217,48 @@ coun_ava_df <- growth_added %>%
   # %>% dplyr::summarise(average_val = mean(value))
   
 # Emission and growth per sector merged df
-em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "location", "year" = "year")) 
-
-# Emission and Env tax merged df (TO NOT BE USED ?YET?)
-# em_envtax_merged_df <- dplyr::left_join(ce_df, env_tot_tax_df, by = c("country" = "location", "year" = "year"))
-
-# Environmental tax and value added merged df (TO NOT BE USED ?YET?)
-# env_tax_merged_df <- dplyr::left_join(env_tax_df, coun_ava_df, by = c("location" = "location", "year" = "year"))
+em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "location", "year" = "year"))
 
 # Agriculture and Fishery Growth Contribution
 
 agr_growth_em_df <- em_growth_merged_df %>% 
   filter(activity == "Agriculture and Fishery")
 
-# "Other" Tax revenue (TO NOT BE USED ?YET?)
-# oth_tax_df <- env_tot_tax_df %>% 
-#   filter(subject == "Other") %>% 
-#   select(c("location", "value", "year")) %>% 
-#   rename("total_env_tax" = "value")
+findAgrCrossCorr <- function(country_name) {
+  
+  country_growth_em <- agr_growth_em_df %>% filter(country == country_name)
+  
+  country_Growth_TimeSeries <- ts(country_growth_em$value, start = 1996)
+  country_Emission_TimeSeries <- ts(country_growth_em$agriculture_em, start = 1996)
+  
+  diff_agr_grwt_ts <- ts(aus_growth_em$value, start = 1996)
+  diff_agr_grwt_ts <- ts(aus_growth_em$agriculture_em, start = 1996)
+  
+  diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
+  
+  diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+  
+  diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
+  
+  # growth IS Trend-Stationary
+  
+  diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating non-stationary
+  
+  diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+  
+  diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
+  
+  ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
+  
+  as.table(setNames(ccf2$acf, ccf2$lag))
+  
+  
+  
+  
+  
+  
+  
+}
 
 
 aus_growth_em <- agr_growth_em_df %>% filter(country == "Australia")
@@ -262,8 +289,8 @@ cor.test(aus_growth_em$value, aus_growth_em$agriculture_em, method = "pearson", 
 # Let's plot two time series 
 
 # one for Added growth wrt years
-Agriculture_Growth_TimeSeries <- ts(aus_growth_em$value, start = 1990)
-Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_em, start = 1990)
+Agriculture_Growth_TimeSeries <- ts(aus_growth_em$value, start = 1996)
+Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_em, start = 1996)
 bound_ts <- cbind(Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries)
 autoplot(bound_ts, facets=TRUE) +
   xlab("Year") + ylab("") +
@@ -291,11 +318,11 @@ diff_agr_em_ts <- diff(Agriculture_Emission_TimeSeries)
 
 # Re-test for Stationarity
 
-diff_agr_grwt_ts %>% diff() %>% adf.test() # Low p-value indicating stationary
+diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
 
-diff_agr_grwt_ts %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
 
-diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() 
+diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() 
 
 # growth IS Trend-Stationary
 
@@ -310,51 +337,54 @@ diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>%
 # Cross correlation
 
 ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
+
+print(ccf2$acf)
 # Negatively correlated in -2 lag
 # Positively correlated in -1 and -3 lag
 # Not sure if i took differencing into account TODO: apply ARIMA MOdel
 
 
-
+agr_arima_1 <- diff_agr_em_ts %>% 
+  model(arima = ARIMA())
 
 
 
 # Australia value added per year for Agriculture Sector
-aus_val_tax %>%
-  ggplot(
-    aes(
-      x = (year),
-      y = (value),
-      color = activity
-    )
-  ) +
-  geom_point(size = 2) +
-  geom_smooth(se = FALSE, method = lm) +
-  facet_grid(rows = vars(activity)) +
-  labs(
-    x = "Year",
-    y = "Value Added",
-    colour = 'Activity Category',
-    title = "Economical Value Added vs Year In Australia"
-  )
-
-aus_val_tax %>% 
-  ggplot(
-    aes(
-      x = (year),
-      y = (total_env_tax),
-      color = activity
-    )
-  ) +
-  geom_point(size = 2) +
-  geom_smooth(se = FALSE, method = lm) +
-  facet_grid(rows = vars(activity)) +
-  labs(
-    x = "Year",
-    y = "Environment Tax Income",
-    colour = 'Activity Category',
-    title = "Environment Tax Income vs Year In Australia"
-  )
+# aus_val_tax %>%
+#   ggplot(
+#     aes(
+#       x = (year),
+#       y = (value),
+#       color = activity
+#     )
+#   ) +
+#   geom_point(size = 2) +
+#   geom_smooth(se = FALSE, method = lm) +
+#   facet_grid(rows = vars(activity)) +
+#   labs(
+#     x = "Year",
+#     y = "Value Added",
+#     colour = 'Activity Category',
+#     title = "Economical Value Added vs Year In Australia"
+#   )
+# 
+# aus_val_tax %>% 
+#   ggplot(
+#     aes(
+#       x = (year),
+#       y = (total_env_tax),
+#       color = activity
+#     )
+#   ) +
+#   geom_point(size = 2) +
+#   geom_smooth(se = FALSE, method = lm) +
+#   facet_grid(rows = vars(activity)) +
+#   labs(
+#     x = "Year",
+#     y = "Environment Tax Income",
+#     colour = 'Activity Category',
+#     title = "Environment Tax Income vs Year In Australia"
+#   )
 
 
 
