@@ -22,6 +22,9 @@ Exploratory data analysis pertaining to the affect of climate change regulations
   ### Employment by activity 
   - Project Path : "data/raw/employment_per_act.csv"
   - URL : https://data.oecd.org/emp/employment-by-activity.htm
+  ### Canada GHG Emissions
+  - Project Path: "data/raw_emission_per_sect/GHG-emissions-sector-en.csv"
+  - URL: https://www.canada.ca/en/environment-climate-change/services/environmental-indicators/greenhouse-gas-emissions.html
 
   ### Per Sector Emission 
   - Source: "United Nations FAO"
