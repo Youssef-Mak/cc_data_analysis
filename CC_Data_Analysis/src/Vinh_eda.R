@@ -6,6 +6,7 @@ library(feasts)
 library(forecast)
 library(ggthemes)
 library(janitor)
+library(lmtest)
 library(lubridate)
 library(maps)
 library(plotly)
@@ -13,235 +14,288 @@ library(plyr)
 library(skimr)
 library(tidyverse)
 library(tsibble)
+library(viridis)
 
-# Load and clean value per activity data from data.oecd
-subject_mappings <- tribble(
-  ~code, ~name,
-  "AGRFORTFISH", "Agriculture and Fishery",
-  "CONSTR", "Construction",
-  "FINANCEINS", "Finance and Insurance",
-  "INDUSENRG", "Industry and Energy",
-  "INFCOMM", "Information Communication",
-  "MFG", "Manufacturing",
-  "OTHSERVACT", "Other Service Activities",
-  "PROSCISUPP", "Profesional and Scientific Support Services",
-  "PUBADMINEDUSOC", "Public",
-  "REALEST", "Real Estate",
-  "SERV", "Services",
-  "TOT", "Total Growth",
-  "WHLEHTELTRANSP", "Wholesale, Retail, Trade, Transport, Accomodation"
-)
-
-value_per_activity <- 
-  read_csv('data/raw/value_added_per_act.csv') %>% 
-  clean_names() %>%
-  select(-indicator, -flag_codes, -frequency) %>% 
-  dplyr::rename(year = time, country = location) %>% 
-  mutate(country = countrycode(country, 'iso3c', 'country.name.en', nomatch=NULL)) %>%   # Replace 3 letter code with full name
-  mutate(country = replace(country, country == 'EU', 'European Union')) %>%     # European union is not covered by the country code
-  mutate(subject = mapvalues(subject, from=subject_mappings$code, to=subject_mappings$name)) %>%  # Replace subject code with name
-  pivot_wider(names_from = measure, values_from = value) 
-
-
-# value_per_activity_tsbl <-
-#   value_per_activity %>%
-#   as_tsibble(key = c(country, subject), index = year) %>% 
-#   fill_gaps(.na=True)
-
- 
-# # Nest time series data per country and subject
-# value_per_activity <-
-#   value_per_activity %>%
-#   group_by(country, subject) %>%
-#   nest()
+# # Load and clean value per activity data from data.oecd
+# subject_mappings <- tribble(
+#   ~code, ~name,
+#   "AGRFORTFISH", "Agriculture and Fishery",
+#   "CONSTR", "Construction",
+#   "FINANCEINS", "Finance and Insurance",
+#   "INDUSENRG", "Industry and Energy",
+#   "INFCOMM", "Information Communication",
+#   "MFG", "Manufacturing",
+#   "OTHSERVACT", "Other Service Activities",
+#   "PROSCISUPP", "Profesional and Scientific Support Services",
+#   "PUBADMINEDUSOC", "Public",
+#   "REALEST", "Real Estate",
+#   "SERV", "Services",
+#   "TOT", "Total Growth",
+#   "WHLEHTELTRANSP", "Wholesale, Retail, Trade, Transport, Accomodation"
+# )
 # 
-# value_per_activity <-
-#   value_per_activity %>%
-#   unnest(cols = c(data))
+# value_per_activity <- 
+#   read_csv('data/raw/value_added_per_act.csv') %>% 
+#   clean_names() %>%
+#   select(-indicator, -flag_codes, -frequency) %>% 
+#   dplyr::rename(year = time, country = location) %>% 
+#   mutate(country = countrycode(country, 'iso3c', 'country.name.en', nomatch=NULL)) %>%   # Replace 3 letter code with full name
+#   mutate(country = replace(country, country == 'EU', 'European Union')) %>%     # European union is not covered by the country code
+#   mutate(subject = mapvalues(subject, from=subject_mappings$code, to=subject_mappings$name)) %>%  # Replace subject code with name
+#   pivot_wider(names_from = measure, values_from = value) 
+
 
 
 # Who are biggest producers of GHG ----------------------------------------
-
-# TODO: Use data from kaggle from united nations instead
-
 
 # Load green house emissions data
 country_ghg_emissions <- 
   read_csv('data/raw/CAIT-Country-GHG-Emissions.csv', skip=2) %>% 
   clean_names() %>% 
+  select(country, year, total_ghg_emissions_mtco2e = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
   na.omit()
-
 
 # Avg emissions of all types per country
 country_avg_emissions <- country_ghg_emissions %>% 
   select(-year) %>% 
   filter(country != 'World', !str_detect(country, 'European Union')) %>% 
   group_by(country) %>% 
-  summarise_each(list(mean = mean))
+  summarise_each(list(avg_ghg_emissions_mtco2e = mean))
 
 # View only top n percent countries based on ghg emissions
 percent_ghg <- 0.80
-
 country_top_avg_emissions <- country_avg_emissions %>% 
-  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>%
-  select(country, avg_ghg_emissions) %>% 
-  arrange(avg_ghg_emissions %>% desc()) %>%
-  mutate(cum_percent_ghg = cumsum(avg_ghg_emissions)/sum(avg_ghg_emissions)) %>% 
+  select(country, avg_ghg_emissions_mtco2e) %>% 
+  arrange(avg_ghg_emissions_mtco2e %>% desc()) %>%
+  mutate(cum_percent_ghg = cumsum(avg_ghg_emissions_mtco2e)/sum(avg_ghg_emissions_mtco2e),
+         percent_global_ghg_emissions = avg_ghg_emissions_mtco2e / sum(avg_ghg_emissions_mtco2))%>% 
   filter(cum_percent_ghg < percent_ghg) %>% 
   select(-cum_percent_ghg)
 
-# Barplot of top 20 countries avg ghg emission
+# Barplot of top 80% countries avg ghg emission
 country_top_avg_emissions %>% 
-  ggplot(aes(reorder(country, avg_ghg_emissions), avg_ghg_emissions)) +
+  ggplot(aes(reorder(country, avg_ghg_emissions_mtco2e), avg_ghg_emissions_mtco2e)) +
   geom_bar(stat='identity') +
   coord_flip() + 
   labs(
-    title = 'Top 20 countries based on their average GHG emissions',
+    title = 'Average GHG emissions of countries making up 80% of global GHG emission',
     x = 'Country',
     y = 'Average GHG emission per year (MtCO2e)'
-  )
+  ) +
+  theme_hc()
 
-"US, China, and India have very high average emission in comparison to the other countries so we will include them in our analysis
-As well, Canada will of course be included
-Could also include Brazil, Indonesia, Japan"
-
-# TODO: We could also focus on CO2 emissions only, however it's part of GHG already
-# TODO: Possibly the rest of the analysis will be purely based on GHG emission as it covers several different types of waste
-
-
-# countries_of_interest <-
-#   tribble(
-#     ~country,
-#     'United States',
-#     'China',
-#     'India',
-#     # 'Japan',
-#     # 'Brazil',
-#     'Canada'
-#   )
-
-# GHG emissions for top 20 countries over time
+# GHG emissions for top 80% countries over time
 p <- country_top_avg_emissions %>%
   select(country) %>%
   inner_join(country_ghg_emissions,by='country') %>%
-  ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
+  mutate(country = fct_reorder(country, total_ghg_emissions_mtco2e, tail, n=1, .desc=TRUE)) %>% 
+  ggplot(aes(x=year, y=total_ghg_emissions_mtco2e, colour=country)) +
   geom_line() +
   labs(
     title = 'GHG emission per country',
     y= 'GHG emission (MtCO2e)',
     x = 'Year',
     colour = 'Country'
-  )
+  ) +
+  theme_hc()
 ggplotly(p)
 
 
-# # GHG emissions for countries of interest only
-# p <- countries_of_interest %>% 
-#   inner_join(country_ghg_emissions,by='country') %>% 
-#   ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
-#   geom_line() +
-#   labs(
-#     title = 'GHG emission per country',
-#     y = 'GHG emission (MtCO2e)',
-#     x = 'Year',
-#     colour = 'Country'
-#   )
-# ggplotly(p)
 
+# World map visualization -------------------------------------------------
+world_data <- map_data('world') %>% 
+  filter(region != 'Antarctica') %>% 
+  mutate(region = countrycode(region, 'iso3c', 'country.name.en', nomatch=NULL))  # Replace 3 letter codes with full name
 
+# Manually map the countries together
+country_mappings <-
+  tribble(
+    ~world_data, ~country_emissions,
+    'North Korea', 'Korea, Dem. Rep. (North)',
+    'South Korea', 'Korea, Rep. (South)', 
+    'Russia', 'Russian Federation',
+    'UK', 'United Kingdom',
+    'Ivory Coast', "Cote d'Ivoire",
+    'Democratic Republic of the Congo', 'Congo, Dem. Rep.',
+    'Republic of Congo', 'Congo, Rep.',
+    'Antigua', 'Antigua & Barbuda',
+    'Barbuda', 'Antigua & Barbuda',
+    'Bahamas', 'Bahamas, The',
+    'Bosnia and Herzegovina', 'Bosnia & Herzegovina',
+    'Gambia', 'Gambia, The',
+    'Trinidad', 'Trinidad & Tobago',
+    'Tobago', 'Trinidad & Tobago',
+    'Macedonia', 'Macedonia, FYR',
+    'Saint Kitts', 'Saint Kitts & Nevis',
+    'Nevis', 'Saint Kitts & Nevis',
+    'Saint Vincent', 'Saint Vincent & Grenadines',
+    'Grenadines', 'Saint Vincent & Grenadines',
+    'Sao Tome and Principe', 'Same Tome & Principe'
+  )
 
-# TODO: Create world map with ghg emissions
-world_data <- map_data('world')
+world_emission_data <- world_data %>% 
+  mutate(region = mapvalues(region, country_mappings$world_data, country_mappings$country_emissions)) %>% 
+  inner_join(country_avg_emissions, by=c('region'='country')) %>% 
+  select(long, lat, group, region, avg_ghg_emissions_mtco2e) %>% 
+  na.omit()
 
+ggplot() +
+  geom_polygon(data=world_data, aes(x=long, y=lat, group=group), fill='white', colour='grey', size=0.01) +
+  coord_equal() +
+  geom_polygon(data=world_emission_data, aes(x=long, y=lat, group=group, fill=avg_ghg_emissions_mtco2e)) +
+  scale_fill_viridis(name = 'Avg GHG emissions (mtco2e)') +
+  labs(
+    title = 'Average GHG emissions',
+    subtitle = '1990-2012',
+    legend = 'Avg GHG emission (mtco2e)'
+  ) +
+  theme(
+    legend.position = 'bottom'
+  )
 
 
 # Kyoto Protocol  ---------------------------------------------------------
 # As all the data is yearly we will do our analysis in terms of years
 kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
-kyoto_protocol_length <- year(kyoto_protocol_effective_date['end']) - year(kyoto_protocol_effective_date['start'])
+kyoto_protocol_effective_years <- c(start = 2005, end = 2012)
+kyoto_protocol_length <- kyoto_protocol_effective_years['end'] - kyoto_protocol_effective_years['start']
 
 # Check worldwide effect
 years <- country_ghg_emissions %>% select(year)
 
 world_ghg_emissions_ts <- country_ghg_emissions %>% 
   filter(country == 'World') %>% 
-  select(total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
-  rename(value = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
-  ts(start=min(years), frequency=1)
+  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  select(year, total_ghg_emissions) %>%  
+  as_tsibble(index=year)
 
-world_ghg_emissions_kyoto <- world_ghg_emissions_ts %>% 
-  window(start = kyoto_protocol_effective_date['start'] %>% year(),
-         end = kyoto_protocol_effective_date['end'] %>% year())
-
-p <- world_ghg_emissions_ts %>% 
-  forecast::autoplot() +
+plot_world_ghg_emissions <- world_ghg_emissions_ts %>% 
+    forecast::autoplot(total_ghg_emissions) +
   geom_point() +
-  geom_vline(xintercept=kyoto_protocol_effective_date['start'] %>% year(), linetype='dashed') +
-  geom_vline(xintercept=kyoto_protocol_effective_date['end'] %>% year(), linetype='dashed') +
+  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed') +
+  geom_vline(xintercept=kyoto_protocol_effective_years['end'], linetype='dashed') +
   labs(
     title = 'World GHG emissions',
     x = 'Year',
     y = 'GHG emissions (megatonnes of co2 equivalent)'
-  )
-ggplotly(p)
+  ) 
+ggplotly(plot_world_ghg_emissions)
 
 
-## Intervention analysis. 
+# Intervention analysis using Regression with ARIMA errors ----------------
+# https://stats.stackexchange.com/questions/43623/comparing-pre-retrofit-utility-bill-time-series-data-to-post-retrofit-data?noredirect=1&lq=1
+# http://freerangestats.info/blog/2018/08/14/fuel-prices
+# https://otexts.com/fpp2/regarima.html chapter 9.2 
 
-# Decreasing acf indicated trend, no seasonility patterns obvious. Seems to match what the plot above shows
-ggAcf(world_ghg_emissions_ts) +
-  labs(title = 'World GHG emissions ACF')
 
-# Arima on time period before kyoto protocol effective date. ARIMA(0,2,0) meaning that after differencing twice 
-# we get a random walk to model our data
-world_ghg_arima <- auto.arima(world_ghg_emissions_ts %>% window(end=kyoto_protocol_effective_date['start'] %>% year() - 1))
+# Fit regression with arima errors with intervention variable
+arimaWithKyotoIntervention <- function(df_tsibble) {
+  z <- df_tsibble %>% 
+    transmute(z = ifelse(year < kyoto_protocol_effective_years['start'], 0, 1)) %>% 
+    pull(z)
+  fit <- df_tsibble %>% auto.arima(xreg=z)
+  return (fit)
+}
 
-# No obvious patterns in ACF, residuals seem almost normal. Residuals also look like white noise, with p-value=0.4309
-# Thus we can confirm that the residuals are independent. As well based on the qq-plot we may assume normality 
-world_ghg_arima %>% checkresiduals()
-world_ghg_arima %>% 
-  residuals() %>% 
-  as_tsibble() %>% 
+world_ghg_emissions_arima <- arimaWithKyotoIntervention(world_ghg_emissions_ts)
+
+# Plot fitted values. Looks pretty good
+arima_plot <- world_ghg_emissions_arima$x %>% 
+  autoplot(series='Actual') +
+  autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
+  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed') +
+  geom_vline(xintercept=kyoto_protocol_effective_years['end'], linetype='dashed') +
+  labs(
+    title = 'Fitted values from ARIMA on World GHG emissions',
+    x = 'Year',
+    y = 'GHG emissions (megatonnes co2 equivalent)',
+    colour = 'Type'
+  ) 
+ggplotly(arima_plot)
+
+# https://stats.stackexchange.com/questions/8868/how-to-calculate-the-p-value-of-parameters-for-arima-model-in-r
+# (1-pnorm(abs(aa$coef)/sqrt(diag(aa$var.coef))))*2 or with coeftest
+# The xreg has a low p-value of 0.39 thus we can conclude that it is not significant. Which matches what the data looks like
+# as there doesn't seem to be much change after the intervention. As well, xreg is positive so again doesn't show
+# that the kyoto protocol helped decrease the ghg emissions
+coeftest(world_ghg_emissions_arima)
+
+# Residuals seem normal enough. As well we can conclude that the errors are independent as p-value is quite high 0.2107
+world_ghg_emissions_arima %>% checkresiduals()
+world_ghg_emissions_arima %>%
+  residuals(type='innovation') %>%
+  as_tsibble() %>%
   ggplot(aes(sample=value)) +
   stat_qq() + stat_qq_line()
 
-# Set h based on kyoto protocol effective dates
-forecasts <- forecast(world_ghg_arima, h=kyoto_protocol_length)
 
-# Plot actual with forecasts
-p +
-  geom_line(data=forecasts$mean, colour='red') +
-  geom_point(data=forecasts$mean, colour='red')
-
-
-# Check how well the forecasts compare to the actual values. We see that the errors grow over time, possibly indicating that
-# the time series changed after the event and decreased over time
-forecasts_errors <- world_ghg_emissions_ts - forecasts$mean
-
-ggAcf(forecasts_errors)
-
-forecasts_errors %>% autoplot() +
-  labs(
-    title = 'Forecast errors',
-    x = 'Year',
-    y = 'GHG emissions (megatonnes of co2 equivalent)'
-  )
+# CONCLUSION: No the kyoto accord did not have any significant impact on global ghg emissions
+# However, it would be better if we had more data points as 23 does not seem like enough to draw conclusions from
 
 
 
+# Intervention analysis per country ---------------------------------------
+
+
+
+
+
+
+
+
+# ## Intervention analysis.
+# 
+# # Decreasing acf indicated trend, no seasonility patterns obvious. Seems to match what the plot above shows
+# ggAcf(world_ghg_emissions_ts) +
+#   labs(title = 'World GHG emissions ACF')
+# 
+# # Arima on time period before kyoto protocol effective date. ARIMA(0,2,0) meaning that after differencing twice
+# # we get a random walk to model our data
+# world_ghg_arima <- auto.arima(world_ghg_emissions_ts %>% window(end=kyoto_protocol_effective_date['start'] %>% year() - 1))
+# 
+# # No obvious patterns in ACF, residuals seem almost normal. Residuals also look like white noise, with p-value=0.4309
+# # Thus we can confirm that the residuals are independent. As well based on the qq-plot we may assume normality
+# world_ghg_arima %>% checkresiduals()
+# world_ghg_arima %>%
+#   residuals() %>%
+#   as_tsibble() %>%
+#   ggplot(aes(sample=value)) +
+#   stat_qq() + stat_qq_line()
+# 
+# # Set h based on kyoto protocol effective dates
+# forecasts <- forecast(world_ghg_arima, h=kyoto_protocol_length)
+# 
+# # Plot actual with forecasts
+# p +
+#   geom_line(data=forecasts$mean, colour='red') +
+#   geom_point(data=forecasts$mean, colour='red')
+# 
+# 
+# # Check how well the forecasts compare to the actual values. We see that the errors grow over time, possibly indicating that
+# # the time series changed after the event and decreased over time
+# forecasts_errors <- world_ghg_emissions_ts - forecasts$mean
+# 
+# ggAcf(forecasts_errors)
+# 
+# forecasts_errors %>% autoplot() +
+#   labs(
+#     title = 'Forecast errors',
+#     x = 'Year',
+#     y = 'GHG emissions (megatonnes of co2 equivalent)'
+#   )
 
 
 # Kyoto Accord per country ------------------------------------------------
-country_top_avg_emission_ts <- country_top_avg_emissions %>% 
-  select(country) %>% 
-  inner_join(country_ghg_emissions, by='country') %>% 
-  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
-  select(country, year, total_ghg_emissions) %>% 
+country_top_avg_emission_ts <- country_top_avg_emissions %>%
+  select(country) %>%
+  inner_join(country_ghg_emissions, by='country') %>%
+  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>%
+  select(country, year, total_ghg_emissions) %>%
   as_tsibble(key=country, index=year)
 
 # Plot emissions per country
-kyoto_accord_per_country_plot <- country_top_avg_emission_ts %>% 
-  mutate(country = fct_reorder(country, total_ghg_emissions, tail, n=1, .desc=TRUE)) %>% 
+kyoto_accord_per_country_plot <- country_top_avg_emission_ts %>%
+  mutate(country = fct_reorder(country, total_ghg_emissions, tail, n=1, .desc=TRUE)) %>%
   forecast::autoplot(total_ghg_emissions) +
   geom_vline(xintercept=kyoto_protocol_effective_date['start'] %>% year(), linetype='dashed') +
   geom_vline(xintercept=kyoto_protocol_effective_date['end'] %>% year(), linetype='dashed') +
@@ -253,34 +307,31 @@ kyoto_accord_per_country_plot <- country_top_avg_emission_ts %>%
 ggplotly(kyoto_accord_per_country_plot)
 
 # Model arima for all countries, on only pre intervention period
-country_top_avg_emissions_arima <- country_top_avg_emission_ts %>% 
-  filter(year < kyoto_protocol_effective_date['start'] %>% year()) %>% 
+country_top_avg_emissions_arima <- country_top_avg_emission_ts %>%
+  filter(year < kyoto_protocol_effective_date['start'] %>% year()) %>%
   model(arima = ARIMA(total_ghg_emissions))
 
 # TODO: ACF for original data
 # TODO: Check residuals for all arima models, and check normality
 
 # Forecasts post intervention period and get errors
-country_top_avg_emissions_forecasts <- country_top_avg_emissions_arima %>% 
-  fabletools::forecast(h = paste(kyoto_protocol_length, 'years')) %>% 
-  rename(total_ghg_emissions_forecast = total_ghg_emissions) %>% 
-  inner_join(country_top_avg_emission_ts, by=c('country', 'year')) %>% 
+country_top_avg_emissions_forecasts <- country_top_avg_emissions_arima %>%
+  fabletools::forecast(h = paste(kyoto_protocol_length, 'years')) %>%
+  rename(total_ghg_emissions_forecast = total_ghg_emissions) %>%
+  inner_join(country_top_avg_emission_ts, by=c('country', 'year')) %>%
   mutate(forecast_error = total_ghg_emissions - total_ghg_emissions_forecast)
 
-# Plot the forecast errors 
-forecast_errors_plot <- country_top_avg_emissions_forecasts %>% 
-  select(country, year, forecast_error) %>% 
-  mutate(country = fct_reorder(country, forecast_error, tail, n=1, .desc=TRUE)) %>% 
+# Plot the forecast errors
+forecast_errors_plot <- country_top_avg_emissions_forecasts %>%
+  select(country, year, forecast_error) %>%
+  mutate(country = fct_reorder(country, forecast_error, tail, n=1, .desc=TRUE)) %>%
   forecast::autoplot(forecast_error) +
   labs(
     title = 'ARIMA forecast errors for post intervention period per country',
     x = 'Year',
     y = 'error (megatonnes of co2 equivalent)'
-  ) 
+  )
 ggplotly(forecast_errors_plot)
-
-
-
 
 
 
