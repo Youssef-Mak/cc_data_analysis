@@ -2,9 +2,12 @@
 library(countrycode)
 library(ggrepel)
 library(fable)
+library(feasts)
+library(forecast)
 library(ggthemes)
 library(janitor)
 library(lubridate)
+library(maps)
 library(plotly)
 library(plyr)
 library(skimr)
@@ -65,7 +68,8 @@ value_per_activity <-
 # Load green house emissions data
 country_ghg_emissions <- 
   read_csv('data/raw/CAIT-Country-GHG-Emissions.csv', skip=2) %>% 
-  clean_names()
+  clean_names() %>% 
+  na.omit()
 
 
 # Avg emissions of all types per country
@@ -75,11 +79,19 @@ country_avg_emissions <- country_ghg_emissions %>%
   group_by(country) %>% 
   summarise_each(list(mean = mean))
 
+# View only top n percent countries based on ghg emissions
+percent_ghg <- 0.80
+
+country_top_avg_emissions <- country_avg_emissions %>% 
+  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>%
+  select(country, avg_ghg_emissions) %>% 
+  arrange(avg_ghg_emissions %>% desc()) %>%
+  mutate(cum_percent_ghg = cumsum(avg_ghg_emissions)/sum(avg_ghg_emissions)) %>% 
+  filter(cum_percent_ghg < percent_ghg) %>% 
+  select(-cum_percent_ghg)
 
 # Barplot of top 20 countries avg ghg emission
-country_avg_emissions %>% 
-  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>% 
-  top_n(20, wt=avg_ghg_emissions) %>% 
+country_top_avg_emissions %>% 
   ggplot(aes(reorder(country, avg_ghg_emissions), avg_ghg_emissions)) +
   geom_bar(stat='identity') +
   coord_flip() + 
@@ -87,8 +99,7 @@ country_avg_emissions %>%
     title = 'Top 20 countries based on their average GHG emissions',
     x = 'Country',
     y = 'Average GHG emission per year (MtCO2e)'
-  ) +
-  theme_hc()
+  )
 
 "US, China, and India have very high average emission in comparison to the other countries so we will include them in our analysis
 As well, Canada will of course be included
@@ -110,9 +121,7 @@ Could also include Brazil, Indonesia, Japan"
 #   )
 
 # GHG emissions for top 20 countries over time
-p <- country_avg_emissions %>%
-  rename(avg_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e_mean) %>%
-  top_n(20, wt=avg_ghg_emissions) %>%
+p <- country_top_avg_emissions %>%
   select(country) %>%
   inner_join(country_ghg_emissions,by='country') %>%
   ggplot(aes(x=year, y=total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e, colour=country)) +
@@ -141,24 +150,31 @@ ggplotly(p)
 
 
 
+# TODO: Create world map with ghg emissions
+world_data <- map_data('world')
+
+
 
 # Kyoto Protocol  ---------------------------------------------------------
+# As all the data is yearly we will do our analysis in terms of years
 kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
-
+kyoto_protocol_length <- year(kyoto_protocol_effective_date['end']) - year(kyoto_protocol_effective_date['start'])
 
 # Check worldwide effect
+years <- country_ghg_emissions %>% select(year)
+
 world_ghg_emissions_ts <- country_ghg_emissions %>% 
   filter(country == 'World') %>% 
-  select(year, total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  select(total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
   rename(value = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
-  as_tsibble(index=year)
+  ts(start=min(years), frequency=1)
 
-world_ghg_emissions_post <- world_ghg_emissions_ts %>% filter(year >= kyoto_protocol_effective_date['start'] %>% year(),
-                                                              year < kyoto_protocol_effective_date['end'] %>% year)
-
+world_ghg_emissions_kyoto <- world_ghg_emissions_ts %>% 
+  window(start = kyoto_protocol_effective_date['start'] %>% year(),
+         end = kyoto_protocol_effective_date['end'] %>% year())
 
 p <- world_ghg_emissions_ts %>% 
-  autoplot(value) +
+  forecast::autoplot() +
   geom_point() +
   geom_vline(xintercept=kyoto_protocol_effective_date['start'] %>% year(), linetype='dashed') +
   geom_vline(xintercept=kyoto_protocol_effective_date['end'] %>% year(), linetype='dashed') +
@@ -176,20 +192,98 @@ ggplotly(p)
 ggAcf(world_ghg_emissions_ts) +
   labs(title = 'World GHG emissions ACF')
 
-# Arima on time period before kyoto protocol effective date. 
-world_ghg_arima <- auto.arima(world_ghg_emissions_ts %>% filter(year < kyoto_protocol_effective_date['start'] %>% year()))
+# Arima on time period before kyoto protocol effective date. ARIMA(0,2,0) meaning that after differencing twice 
+# we get a random walk to model our data
+world_ghg_arima <- auto.arima(world_ghg_emissions_ts %>% window(end=kyoto_protocol_effective_date['start'] %>% year() - 1))
 
-# No obvious patterns in ACF, residuals seem almost normal. Residuals also look like white noise, thought here is a big dip at 20
+# No obvious patterns in ACF, residuals seem almost normal. Residuals also look like white noise, with p-value=0.4309
+# Thus we can confirm that the residuals are independent. As well based on the qq-plot we may assume normality 
 world_ghg_arima %>% checkresiduals()
+world_ghg_arima %>% 
+  residuals() %>% 
+  as_tsibble() %>% 
+  ggplot(aes(sample=value)) +
+  stat_qq() + stat_qq_line()
 
 # Set h based on kyoto protocol effective dates
-forecasts <- forecast(world_ghg_arima, h=8)
-forecasts_kyoto <- forecasts$mean %>% as_tsibble() %>% rename(year=index)
+forecasts <- forecast(world_ghg_arima, h=kyoto_protocol_length)
 
 # Plot actual with forecasts
 p +
-  geom_line(data=forecasts_kyoto, colour='red') +
-  geom_point(data=forecasts_kyoto, colour='red')
+  geom_line(data=forecasts$mean, colour='red') +
+  geom_point(data=forecasts$mean, colour='red')
+
+
+# Check how well the forecasts compare to the actual values. We see that the errors grow over time, possibly indicating that
+# the time series changed after the event and decreased over time
+forecasts_errors <- world_ghg_emissions_ts - forecasts$mean
+
+ggAcf(forecasts_errors)
+
+forecasts_errors %>% autoplot() +
+  labs(
+    title = 'Forecast errors',
+    x = 'Year',
+    y = 'GHG emissions (megatonnes of co2 equivalent)'
+  )
+
+
+
+
+
+# Kyoto Accord per country ------------------------------------------------
+country_top_avg_emission_ts <- country_top_avg_emissions %>% 
+  select(country) %>% 
+  inner_join(country_ghg_emissions, by='country') %>% 
+  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  select(country, year, total_ghg_emissions) %>% 
+  as_tsibble(key=country, index=year)
+
+# Plot emissions per country
+kyoto_accord_per_country_plot <- country_top_avg_emission_ts %>% 
+  mutate(country = fct_reorder(country, total_ghg_emissions, tail, n=1, .desc=TRUE)) %>% 
+  forecast::autoplot(total_ghg_emissions) +
+  geom_vline(xintercept=kyoto_protocol_effective_date['start'] %>% year(), linetype='dashed') +
+  geom_vline(xintercept=kyoto_protocol_effective_date['end'] %>% year(), linetype='dashed') +
+  labs(
+    title = 'GHG emissions from countries making up top 80% of ghg emissions globally',
+    x = 'Year',
+    y = 'GHG emissions (megatonnes of co2 equivalent)'
+  )
+ggplotly(kyoto_accord_per_country_plot)
+
+# Model arima for all countries, on only pre intervention period
+country_top_avg_emissions_arima <- country_top_avg_emission_ts %>% 
+  filter(year < kyoto_protocol_effective_date['start'] %>% year()) %>% 
+  model(arima = ARIMA(total_ghg_emissions))
+
+# TODO: ACF for original data
+# TODO: Check residuals for all arima models, and check normality
+
+# Forecasts post intervention period and get errors
+country_top_avg_emissions_forecasts <- country_top_avg_emissions_arima %>% 
+  fabletools::forecast(h = paste(kyoto_protocol_length, 'years')) %>% 
+  rename(total_ghg_emissions_forecast = total_ghg_emissions) %>% 
+  inner_join(country_top_avg_emission_ts, by=c('country', 'year')) %>% 
+  mutate(forecast_error = total_ghg_emissions - total_ghg_emissions_forecast)
+
+# Plot the forecast errors 
+forecast_errors_plot <- country_top_avg_emissions_forecasts %>% 
+  select(country, year, forecast_error) %>% 
+  mutate(country = fct_reorder(country, forecast_error, tail, n=1, .desc=TRUE)) %>% 
+  forecast::autoplot(forecast_error) +
+  labs(
+    title = 'ARIMA forecast errors for post intervention period per country',
+    x = 'Year',
+    y = 'error (megatonnes of co2 equivalent)'
+  ) 
+ggplotly(forecast_errors_plot)
+
+
+
+
+
+
 
 
 
@@ -284,8 +378,7 @@ p <- canada_ghg_emissions %>%
     x = 'Year',
     y = 'GHG emissions (megatonnes of CO2 equivalent)',
     colour = 'Category'
-  ) +
-  theme_hc()
+  )
 ggplotly(p)
 
 
