@@ -6,23 +6,23 @@ library(tidyr)
 library(readxl)
 library(janitor)
 library(ggplot2)
-install.packages("ggfortify")
+# install.packages("ggfortify")
 library(ggfortify)
 library(skimr)
 library(stringr)
 library(ggrepel)
 
-install.packages("tidyverse")
+# install.packages("tidyverse")
 library(tidyverse)
 
-install.packages("tsibble")
+# install.packages("tsibble")
 library(tsibble)
 
 
-install.packages("tseries")
+# install.packages("tseries")
 library(tseries)
 
-install.packages("countrycode")
+# install.packages("countrycode")
 library(countrycode)
 
 
@@ -123,7 +123,8 @@ countries_df
 # Add columns to emission data frame to convene to GDP growth per sector df
 # TODO : Add columns for all sectors not just agriculture
 ce_df <- ce_df %>% 
-  mutate(agriculture_em = agriculture_mt_co2e) 
+  rename(agriculture_em = agriculture_mt_co2e) %>% 
+  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e)
 
   
 
@@ -167,7 +168,11 @@ countries_of_interest <-
     ~country,
     'United States',
     'China',
-    'India',
+    # 'India',
+    'Australia',
+    'Chile',
+    'Colombia',
+    # 'Germany',
     'Japan',
     'Brazil',
     'Canada'
@@ -224,40 +229,89 @@ em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "
 agr_growth_em_df <- em_growth_merged_df %>% 
   filter(activity == "Agriculture and Fishery")
 
-findAgrCrossCorr <- function(country_name) {
+# Loop through countries of interest
+countries_ccf_res <- tibble()
+for (i in 1:nrow(countries_of_interest)) {
+  country <- countries_of_interest[i,]$country
+  print(country)
+  ccf_res <- findTotalCrossCorr(em_growth_merged_df, country)
+  countries_ccf_res <- bind_rows(countries_ccf_res, ccf_res)
+}
+
+countries_ccf_res %>%
+  ggplot(
+    aes(
+      x = (LAG),
+      y = (ACF),
+      color = country
+    )
+  ) +
+  geom_point(size = 2) +
+  # geom_smooth(se = FALSE, method = lm) +
+  # facet_grid(rows = vars(activity)) +
+  labs(
+    x = "LAG (Delay between correlation)",
+    y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Between Total Growth and Total Emissions Time Series"
+  )
+
+# test_df <- findAgrCrossCorr("United States") %>% mutate(country = "Hello")
+
+
+
+# Find cross correlations between Total Growth and And Emissions for Given Country
+findTotalCrossCorr <- function(em_growth_df, country_name) {
   
-  country_growth_em <- agr_growth_em_df %>% filter(country == country_name)
+  country_growth_em <- em_growth_df %>% 
+    filter(activity == "Total Growth") %>% 
+    filter(country == country_name)
   
-  country_Growth_TimeSeries <- ts(country_growth_em$value, start = 1996)
-  country_Emission_TimeSeries <- ts(country_growth_em$agriculture_em, start = 1996)
+  min_year <- min(country_growth_em$year)
+  print(min_year)
   
-  diff_agr_grwt_ts <- ts(aus_growth_em$value, start = 1996)
-  diff_agr_grwt_ts <- ts(aus_growth_em$agriculture_em, start = 1996)
+  country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+  country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions, start = min_year) %>% stationarize()
   
-  diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
+  ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
   
-  diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+  xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% mutate(country = country_name) 
   
-  diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
+  # Critical Values at 5% conf Level = +-2/sqrt(n)
+  crit_val_lb <- (-2 / sqrt(ccf2$n.used))
+  crit_val_up <- (2 / sqrt(ccf2$n.used))
   
-  # growth IS Trend-Stationary
+  xcorrDF <- xcorrDF %>% filter(ACF >= up | ACF <= lb)
   
-  diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating non-stationary
+  return(xcorrDF)
   
-  diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
+}
+
+
+
+# Trend Stationarize a time series
+stationarize <- function(time_series) {
   
-  diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
+  adf_test <- time_series %>% adf.test()
+  adf_p <- adf_test$p.value
+  print(adf_p)
+  while (adf_p > 0.05) {
+    time_series <- time_series %>% diff()
+    adf_test <- time_series %>% adf.test()
+    adf_p <- adf_test$p.value
+  }
+
   
-  ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
+  kpss_test <- time_series %>% kpss.test()
+  kpss_p <- kpss_test$p.value
+  print(kpss_p)
+  while (kpss_p < 0.05) {
+    time_series <- time_series %>% kpss.test()
+    kpss_test <- time_series %>% kpss.test()
+    kpss_p <- kpss_test$p.value
+  }
   
-  as.table(setNames(ccf2$acf, ccf2$lag))
-  
-  
-  
-  
-  
-  
-  
+  return(time_series)
 }
 
 
@@ -310,7 +364,7 @@ kpss.test(Agriculture_Growth_TimeSeries) # High p-value indicating non-trend-sta
 
 adf.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-stationary
 
-kpss.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-trend-stationary
+kpss_t <- kpss.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-trend-stationary
 
 diff_agr_grwt_ts <- diff(Agriculture_Growth_TimeSeries)
 
@@ -326,7 +380,7 @@ diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff()
 
 # growth IS Trend-Stationary
 
-diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating non-stationary
+diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
 
 diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
 
@@ -337,6 +391,15 @@ diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>%
 # Cross correlation
 
 ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
+
+lb <- (-2 / sqrt(ccf2$n.used))
+
+up <- (2/ sqrt(ccf2$n.used))
+
+data.frame(ACF = ccf2$acf, LAG = ccf2$lag)
+
+xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% filter(ACF >= up | ACF <= lb)
+
 
 print(ccf2$acf)
 # Negatively correlated in -2 lag
