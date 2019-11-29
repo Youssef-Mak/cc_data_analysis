@@ -87,4 +87,72 @@ WorldResults <-  lapply(WorldCCF,FUN = GenerateCCF)
 Relationships<- lapply(WorldResults,FUN = GetCCFRelationshipsFromWorld) %>% bind_rows()
 CCFPerCountry<- lapply(WorldResults,FUN = GetCCFObjectsFromWorld)
 
-test <- Relationships%>% right_join(CountryNames, by = c("country_code" = "country_code"))
+Relationships <- Relationships%>% right_join(CountryNames, by = c("country_code" = "country_code"))
+
+RegionalRelationships <- Relationships %>% group_split(region)
+RegionalPlots <- list()
+WorldRelation <- list()
+WorldNotEnoughInfo <- list()
+WorldInteresting <- list()
+WorldCountryNeg <- list()
+WorldCountryPos<-list()
+WorldCountryNone <- list()
+for(region in RegionalRelationships)
+{
+  fixedRegion <- region %>% na.omit()%>%summarize(NumNeg =sum(NegSigRelation == TRUE),
+                                                  NumPos = sum(PosSigRelation == TRUE),
+                                                  NumNone = sum(SigRelation == FALSE))
+  regionName = region$region[[1]]
+  NotEnoughInfoCountries <- region %>% filter(is.na(PosSigRelation)) %>% 
+    select(country_code,short_name,region)
+  
+  interestCountriesFromRegion <- region %>% 
+    na.omit() %>% 
+    filter(PosSigRelation == NegSigRelation, PosSigRelation == TRUE) %>%
+    select(country_code,short_name,region)
+  
+  PosCountries <- region %>% 
+    na.omit() %>% 
+    filter(PosSigRelation == TRUE, NegSigRelation == FALSE) %>%
+    select(country_code,short_name,region)
+  
+  NegCountries <- region %>% 
+    na.omit() %>% 
+    filter(NegSigRelation  == TRUE, PosSigRelation == FALSE) %>%
+    select(country_code,short_name,region)
+  
+  NoneCountries <- region %>% 
+    na.omit() %>% 
+    filter(SigRelation == FALSE) %>%
+    select(country_code,short_name,region)
+  
+  fixedRegion <- fixedRegion %>% mutate(NumNeg = NumNeg - nrow(interestCountriesFromRegion)) %>%
+    mutate(NumPos = NumPos - nrow(interestCountriesFromRegion)) %>%
+    mutate(notEnoughInfo = nrow(NotEnoughInfoCountries)) %>%
+    mutate(both = nrow(interestCountriesFromRegion))
+  fixedRegion <- fixedRegion %>% pivot_longer(cols = colnames(.),names_to = "Relationship",values_to = "value")
+  regionPlot <-  fixedRegion %>%ggplot(aes(x = Relationship,y = value,colour = Relationship,fill = Relationship)) + 
+    geom_bar(stat="identity") + labs(
+      title = regionName
+    ) + 
+    scale_y_discrete(limits = seq(from = 0,to = max(fixedRegion$value), by = 5))
+  RegionalPlots[[length(RegionalPlots) + 1]] <- regionPlot
+  WorldCountryPos[[length(WorldCountryPos) + 1]] <- PosCountries
+  WorldCountryNeg[[length(WorldCountryNeg) + 1]] <- NegCountries
+  WorldNotEnoughInfo[[length(WorldNotEnoughInfo) + 1]] <- NotEnoughInfoCountries
+  WorldInteresting[[length(WorldInteresting) + 1]] <- interestCountriesFromRegion
+  WorldCountryNone[[length(WorldCountryNone) + 1]] <-  NoneCountries
+  WorldRelation[[length(WorldRelation) + 1]] <- fixedRegion
+}
+
+WorldRelation <- WorldRelation %>% bind_rows() %>% 
+  pivot_wider(names_from = "Relationship",values_from = "value",values_fn = list(value = sum)) %>%
+  pivot_longer(cols = colnames(.),names_to = "Relation",values_to = "value")
+
+WorldNotEnoughInfo <- WorldNotEnoughInfo %>% bind_rows()
+WorldInteresting <-WorldInteresting %>% bind_rows()
+WorldCountryNeg <- WorldCountryNeg %>% bind_rows()
+WorldCountryPos<-WorldCountryPos %>% bind_rows()
+WorldCountryNone <- WorldCountryNone %>% bind_rows()
+
+WorldRelationPlot
