@@ -3,7 +3,7 @@ library(readxl)
 library(janitor)
 library(ggplot2)
 library(tidyr)
-library(stringr)
+library(tidyverse)
 library(knitr)
 library(tsibble)
 library(feasts)
@@ -169,16 +169,24 @@ library(spData)
 library(sp)
 GetCategory <- function(CountryName)
 {
-  category <- WorldInfo %>% filter(str_detect(CountryName,str_sub(short_name,1,4)) ) %>% select(RelationshipCategory)
+  category <- WorldInfo %>% filter(str_detect(string = CountryName,pattern = str_sub(short_name,1,4)) ) %>% select(RelationshipCategory)
   if(nrow(category) == 0){category = "No Info"}
   else if(nrow(category) == 1){category = category[[1]]}
   else{
-    category = "WTF"
-    print(paste0("WTF",CountryName))
+    Negatives = paste0("Mauri|","Austria|","Guin|","Niger|","United States|","Mala|","The|","United A|","Turk|","South Afr|","New Z|","Slove")
+    NoInfo = paste0("North|","Dem. Rep. Korea|","Dominican Republic|","French|","South S|","New C|","Green")
+    Pos = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
+    both = paste0("Australia|","Greece")
+    if(str_detect(CountryName,Negatives)){category = "Negative"}
+    else if(str_detect(CountryName,Pos)){category = "Positive"}
+    else if(str_detect(CountryName,NoInfo)){category = "No Info"}
+    else if(str_detect(CountryName,both)){category = "both"}
+    else{category = "WTF"}
       }
   return(category)
 }
-world <- world %>% mutate(newC = GetCategory(name_long))
-tm_shape(world) + tm_fill(col = "name_long")
+world <- spData::world
+world <- world %>%rowwise()%>%mutate(newC = GetCategory(name_long))
+world %>% tm_shape() + tm_fill(col = "newC")
 
 getColourForRelation
