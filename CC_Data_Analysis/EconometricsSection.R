@@ -149,10 +149,36 @@ WorldRelation <- WorldRelation %>% bind_rows() %>%
   pivot_wider(names_from = "Relationship",values_from = "value",values_fn = list(value = sum)) %>%
   pivot_longer(cols = colnames(.),names_to = "Relation",values_to = "value")
 
-WorldNotEnoughInfo <- WorldNotEnoughInfo %>% bind_rows()
-WorldInteresting <-WorldInteresting %>% bind_rows()
-WorldCountryNeg <- WorldCountryNeg %>% bind_rows()
-WorldCountryPos<-WorldCountryPos %>% bind_rows()
-WorldCountryNone <- WorldCountryNone %>% bind_rows()
-
+WorldNotEnoughInfo <- WorldNotEnoughInfo %>% bind_rows() %>% mutate(RelationshipCategory = "No Info")
+WorldInteresting <-WorldInteresting %>% bind_rows() %>% mutate(RelationshipCategory = "Both")
+WorldCountryNeg <- WorldCountryNeg %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative")
+WorldCountryPos<-WorldCountryPos %>% bind_rows() %>% mutate(RelationshipCategory = "Positive")
+WorldCountryNone <- WorldCountryNone %>% bind_rows()  %>% mutate(RelationshipCategory = "None")
+WorldInfo <- bind_rows(WorldNotEnoughInfo,WorldInteresting,WorldCountryNeg,WorldCountryPos,WorldCountryNone)
+WorldRelationPlot <-WorldRelation %>% 
+  ggplot(aes(x = Relation, y = value, colour = Relation, fill = Relation)) +
+  geom_bar(stat = "identity") + 
+  labs(y = "Number of countries",
+       title = "World stats")  + 
+  scale_y_discrete(limits = seq(from = 0,to = max(WorldRelation$value), by = 5))
 WorldRelationPlot
+
+library(tmap)
+library(sf)
+library(spData)
+library(sp)
+GetCategory <- function(CountryName)
+{
+  category <- WorldInfo %>% filter(str_detect(CountryName,str_sub(short_name,1,4)) ) %>% select(RelationshipCategory)
+  if(nrow(category) == 0){category = "No Info"}
+  else if(nrow(category) == 1){category = category[[1]]}
+  else{
+    category = "WTF"
+    print(paste0("WTF",CountryName))
+      }
+  return(category)
+}
+world <- world %>% mutate(newC = GetCategory(name_long))
+tm_shape(world) + tm_fill(col = "name_long")
+
+getColourForRelation
