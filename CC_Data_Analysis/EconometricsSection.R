@@ -186,7 +186,7 @@ GetCategory <- function(CountryName)
   return(category)
 }
 world <- spData::world
-world <- world %>%rowwise()%>%mutate(newC = GetCategory(name_long))
+world <- world %>%rowwise()%>%mutate(newC = GetCategory(name_long)) %>% ungroup() %>% st_as_sf()
 world %>% tm_shape() + tm_fill(col = "newC")
 
 getColourForRelation
