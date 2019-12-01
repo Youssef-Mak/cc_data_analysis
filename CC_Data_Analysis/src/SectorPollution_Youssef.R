@@ -1,29 +1,18 @@
-
-library(plyr)
 library(dplyr)
 library(countrycode)
 library(tidyr)
 library(readxl)
 library(janitor)
 library(ggplot2)
-# install.packages("ggfortify")
 library(ggfortify)
 library(skimr)
 library(stringr)
 library(ggrepel)
-
-# install.packages("tidyverse")
 library(tidyverse)
-
-# install.packages("tsibble")
 library(tsibble)
-
-
-# install.packages("tseries")
 library(tseries)
-
-# install.packages("countrycode")
 library(countrycode)
+library(plotly)
 
 
 country_emissions_filename <- "data/raw/CAIT-Country-GHG-Emissions.csv"
@@ -47,7 +36,7 @@ empl_per_act_filename <- "data/raw/employment_per_act.csv"
 # CO2 per sector
 co2_per_sect <- "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
 
-# methane per sector
+# Methane per sector
 meth_per_sect <- "data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
 
 # Nitrous Oxide per sector
@@ -72,8 +61,12 @@ ghg_emission <- processCsvData(gge_per_sect) %>%
   mutate(emission_sum = rowSums(.[3:12]))
 
 # Country Emission DF (mtCO2)
-ce_df <-  read.csv(country_emissions_filename, skip=2) %>% 
-  clean_names()
+# Add columns to emission data frame to convene to GDP growth per sector df
+# TODO : Add columns for all sectors not just agriculture
+ce_df <- read.csv(country_emissions_filename, skip=2) %>% 
+  clean_names() %>% 
+  rename(agriculture_em = agriculture_mt_co2e) %>% 
+  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e)
 
 # Regulation per country DF
 reg_df <- processCsvData(regulation_filename)
@@ -85,34 +78,44 @@ env_tax_df <- processCsvData(emission_tax_filename) %>%
   dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
 
 # Per Country Activity Value Added DF
-coun_ava_df <- processCsvData(activity_value_filename) %>% 
+coun_growth_add_df <- processCsvData(activity_value_filename) %>% 
   dplyr::rename(activity = subject) %>% 
   dplyr::rename(year = time) %>% 
   select(-starts_with("indicator")) %>% # Remove Indicator 
-  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
+  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en')) %>% 
+  filter(measure == "AGRWTH")
 
 # Rename value added sector names to convene to emission dataset sector name
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("AGRFORTFISH" = "Agriculture and Fishery"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("CONSTR" = "Construction"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("FINANCEINS" = "Finance and Insurance"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("INDUSENRG" = "Industry and Energy")) 
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("INFCOMM" = "Information Communication"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("MFG" = "Manufacturing"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("OTHSERVACT" = "Other Service Activities"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("PROSCISUPP" = "Profesional and Scientific Support Services"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("PUBADMINEDUSOC" = "Public")) # Public Administration, Defense, Education, Health, Social Work
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("REALEST" = "Real Estate"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("SERV" = "Services"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("TOT" = "Total Growth"))
-coun_ava_df$activity <- plyr::revalue(coun_ava_df$activity, c("WHLEHTELTRANSP" = "Transport, Accomodation"))
+# Industry Mappings
+subject_mappings <- tribble(
+  ~code, ~name,
+  "AGRFORTFISH", "Agriculture and Fishery",
+  "CONSTR", "Construction",
+  "FINANCEINS", "Finance and Insurance",
+  "INDUSENRG", "Industry and Energy",
+  "INFCOMM", "Information Communication",
+  "MFG", "Manufacturing",
+  "OTHSERVACT", "Other Service Activities",
+  "PROSCISUPP", "Profesional and Scientific Support Services",
+  "PUBADMINEDUSOC", "Public",
+  "REALEST", "Real Estate",
+  "SERV", "Services",
+  "TOT", "Total Growth",
+  "WHLEHTELTRANSP", "Wholesale, Retail, Trade, Transport, Accomodation"
+)
+coun_growth_add_df <- coun_growth_add_df %>% mutate(activity = mapvalues(activity, subject_mappings$code, subject_mappings$name)) 
+  
 
 
 # Rename Environment Tax Sectors
-env_tax_df$subject <- plyr::revalue(env_tax_df$subject, c("ENRG" = "Energy"))
-env_tax_df$subject <- plyr::revalue(env_tax_df$subject, c("MOTORVEH" = "Motored Vehicles"))
-env_tax_df$subject <- plyr::revalue(env_tax_df$subject, c("OTH" = "Other"))
-env_tax_df$subject <- plyr::revalue(env_tax_df$subject, c("TOT" = "Total Environmental Tax Generated"))
-
+env_subject_mappings <- tribble(
+  ~code, ~name,
+  "ENRG", "Energy",
+  "MOTORVEH", "Motored Vehicles",
+  "OTH", "Other",
+  "TOT", "Total Environmental Tax Generated"
+)
+env_tax_df <- env_tax_df %>% mutate(subject = mapvalues(subject, env_subject_mappings$code, env_subject_mappings$name))
 
 
 countries_ce <- unique(ce_df$country)
@@ -120,33 +123,78 @@ countries_ce
 countries_df <- unique(coun_ava_df$location)
 countries_df
 
-# Add columns to emission data frame to convene to GDP growth per sector df
-# TODO : Add columns for all sectors not just agriculture
-ce_df <- ce_df %>% 
-  rename(agriculture_em = agriculture_mt_co2e) %>% 
-  rename(total_ghg_emissions = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e)
-
   
 
-# Get Countries of Interest
+
+# Get Countries of Interest -----------------------------------------------
+
+# Vinh Version 
+country_ghg_emissions <- 
+  read_csv('data/raw/CAIT-Country-GHG-Emissions.csv', skip=2) %>% 
+  clean_names() %>% 
+  select(country, year, total_ghg_emissions_mtco2e = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
+  na.omit()
+
+# Avg emissions of all types per country
+country_avg_emissions <- country_ghg_emissions %>% 
+  select(-year) %>% 
+  filter(country != 'World', !str_detect(country, 'European Union')) %>% 
+  group_by(country) %>% 
+  summarise_each(list(avg_ghg_emissions_mtco2e = mean))
+
+# View only top n percent countries based on ghg emissions
+percent_ghg <- 0.80
+country_top_avg_emissions <- country_avg_emissions %>% 
+  select(country, avg_ghg_emissions_mtco2e) %>% 
+  arrange(avg_ghg_emissions_mtco2e %>% desc()) %>%
+  mutate(cum_percent_ghg = cumsum(avg_ghg_emissions_mtco2e)/sum(avg_ghg_emissions_mtco2e),
+         percent_global_ghg_emissions = avg_ghg_emissions_mtco2e / sum(avg_ghg_emissions_mtco2e))%>% 
+  filter(cum_percent_ghg < percent_ghg) %>% 
+  select(-cum_percent_ghg)
+
+p <- country_top_avg_emissions %>%
+  select(country) %>%
+  inner_join(country_ghg_emissions,by='country') %>%
+  mutate(country = fct_reorder(country, total_ghg_emissions_mtco2e, tail, n=1, .desc=TRUE)) %>% 
+  ggplot(aes(x=year, y=total_ghg_emissions_mtco2e, colour=country)) +
+  geom_line() +
+  labs(
+    title = 'GHG emission per country',
+    y= 'GHG emission (MtCO2e)',
+    x = 'Year',
+    colour = 'Country'
+  ) +
+  theme_hc()
+
+ggplotly(p)
 
 # Avg emissions of all types per country (mtCO2)
+
 country_avg_emissions <- ce_df %>% 
   select(-year) %>% 
   filter(country != 'World', !str_detect(country, 'European Union')) %>% 
   group_by(country) %>% 
   summarise_each(list(mean = mean))
 
+p <- country_top_avg_emissions %>%
+  select(country) %>%
+  inner_join(country_ghg_emissions,by='country') %>%
+  mutate(country = fct_reorder(country, total_ghg_emissions_mtco2e, tail, n=1, .desc=TRUE)) %>% 
+  ggplot(aes(x=year, y=total_ghg_emissions_mtco2e, colour=country)) +
+  geom_line() +
+  labs(
+    title = 'GHG emission per country',
+    y= 'GHG emission (MtCO2e)',
+    x = 'Year',
+    colour = 'Country'
+  ) +
+  theme_hc()
+
 ce_df_freq <- data.frame(table(ce_df$country))
 
 # Avg emission for all GHG (in tonnes of ghg) [Missing years]
 # ghg_avg_emissions -> ghg_emission %>% 
-#   group_by(entity) 
-
-  
-  
-
- 
+#   group_by(entity)
 
 # Barplot of top 20 countries avg ghg emission
 country_avg_emissions %>% 
@@ -168,11 +216,11 @@ countries_of_interest <-
     ~country,
     'United States',
     'China',
-    # 'India',
+    'India',
     'Australia',
     'Chile',
     'Colombia',
-    # 'Germany',
+    'Germany',
     'Japan',
     'Brazil',
     'Canada'
@@ -182,11 +230,6 @@ countries_of_interest <-
 # Measure used should be Percent of total tax
 # env_tot_tax_df <- env_tax_df %>% 
 #   filter(measure == "PC_TOT_TAX")
-
-
-# AGRWTH value 
-growth_added <- coun_ava_df %>% 
-  filter(measure == "AGRWTH")
 
 
 # Per Activity Growth Added DF(total growth added per year per country)
@@ -222,7 +265,7 @@ coun_ava_df <- growth_added %>%
   # %>% dplyr::summarise(average_val = mean(value))
   
 # Emission and growth per sector merged df
-em_growth_merged_df <- dplyr::left_join(ce_df, coun_ava_df, by = c("country" = "location", "year" = "year"))
+em_growth_merged_df <- dplyr::left_join(ce_df, coun_growth_add_df, by = c("country" = "location", "year" = "year"))
 
 # Agriculture and Fishery Growth Contribution
 
@@ -230,7 +273,7 @@ agr_growth_em_df <- em_growth_merged_df %>%
   filter(activity == "Agriculture and Fishery")
 
 # Loop through countries of interest
-countries_ccf_res <- tibble()
+countries_ccf_res <- tribble()
 for (i in 1:nrow(countries_of_interest)) {
   country <- countries_of_interest[i,]$country
   print(country)
@@ -246,7 +289,7 @@ countries_ccf_res %>%
       color = country
     )
   ) +
-  geom_point(size = 2) +
+  geom_point(aes(size = dist)) +
   # geom_smooth(se = FALSE, method = lm) +
   # facet_grid(rows = vars(activity)) +
   labs(
@@ -267,24 +310,79 @@ findTotalCrossCorr <- function(em_growth_df, country_name) {
     filter(activity == "Total Growth") %>% 
     filter(country == country_name)
   
+  if (dim(country_growth_em)[1] == 0) {
+   return(tribble(~ACF, ~LAG, ~country, ~dist, NA, NA, country_name, NA)) 
+  }
+  
   min_year <- min(country_growth_em$year)
   print(min_year)
   
+  print("Making Time series")
   country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+  print(country_Growth_TimeSeries)
   country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions, start = min_year) %>% stationarize()
+  print(country_Emission_TimeSeries)
   
+  print("making ccf")
   ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+  print("Done making ccf")
   
-  xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% mutate(country = country_name) 
-  
-  # Critical Values at 5% conf Level = +-2/sqrt(n)
+  # Critical Values at 5% conf Level = +-2/sqrt(n) (assuming normal distribution of ACF)
   crit_val_lb <- (-2 / sqrt(ccf2$n.used))
-  crit_val_up <- (2 / sqrt(ccf2$n.used))
+  crit_val_ub <- (2 / sqrt(ccf2$n.used))
   
-  xcorrDF <- xcorrDF %>% filter(ACF >= up | ACF <= lb)
+  print("making xcorr")
+  xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
+    mutate(country = country_name) %>% 
+    mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>% 
+    filter(ACF >= crit_val_ub | ACF <= crit_val_lb)
   
+  print("Done making xcorr")
   return(xcorrDF)
   
+}
+
+# Country Example
+country_growth_em <- em_growth_merged_df %>% 
+  filter(activity == "Total Growth") %>% 
+  filter(country == "Germany")
+
+min_year <- min(country_growth_em$year)
+print(min_year)
+
+country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions, start = min_year) %>% stationarize()
+
+ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+
+# Critical Values at 5% conf Level = +-2/sqrt(n) (assuming normal distribution of ACF)
+crit_val_lb <- (-2 / sqrt(ccf2$n.used))
+crit_val_ub <- (2 / sqrt(ccf2$n.used))
+
+df <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) 
+
+xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
+  mutate(country = "Germany") %>%
+  mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>%
+  filter(ACF >= crit_val_ub | ACF <= crit_val_lb) 
+
+countries_ccf_res <- bind_rows(countries_ccf_res, xcorrDF)
+
+
+findSignificance <- function(acf, upper_bound, lower_bound){
+  print("ACF")
+  print(acf)
+  print("Upp bound")
+  print(upper_bound)
+  print("Lower bound")
+  print(lower_bound)
+  if ( acf >= upper_bound) {
+    return(acf - upper_bound)
+  } else if (acf <= lower_bound) {
+    return(abs(acf - lower_bound))
+  } else {
+    return((-1) * min(abs(upper_bound - acf), abs(lower_bound - acf)))
+  }
 }
 
 
@@ -294,23 +392,25 @@ stationarize <- function(time_series) {
   
   adf_test <- time_series %>% adf.test()
   adf_p <- adf_test$p.value
+  print("P value")
   print(adf_p)
   while (adf_p > 0.05) {
     time_series <- time_series %>% diff()
     adf_test <- time_series %>% adf.test()
     adf_p <- adf_test$p.value
   }
-
   
   kpss_test <- time_series %>% kpss.test()
   kpss_p <- kpss_test$p.value
+  print("P value")
   print(kpss_p)
   while (kpss_p < 0.05) {
-    time_series <- time_series %>% kpss.test()
+    time_series <- time_series %>% diff()
     kpss_test <- time_series %>% kpss.test()
     kpss_p <- kpss_test$p.value
   }
   
+  print("Done stationarizing")
   return(time_series)
 }
 
