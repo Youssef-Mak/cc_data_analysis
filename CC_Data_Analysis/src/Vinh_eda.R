@@ -95,9 +95,10 @@ country_top_total_emissions %>%
     title = paste0('Total GHG emissions of countries making up ', percent_cutoff*100, '% of global GHG emission'),
     subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
     x = 'Country',
-    y = 'Total GHG emission (mtCO2e)'
+    y = 'Total GHG emission (mtco2e)'
   ) +
-  theme_hc()
+  theme_gdocs()
+
 
 
 # World map visualization -------------------------------------------------
@@ -138,7 +139,6 @@ world_emission_data <- world_data %>%
   select(long, lat, group, region, total_ghg_emissions_mtco2e) %>% 
   na.omit()
 
-# TODO: fix legend numbers
 ggplot() +
   geom_polygon(data=world_data, aes(x=long, y=lat, group=group), fill='white', colour='grey', size=0.01) +
   coord_equal() +
@@ -150,7 +150,8 @@ ggplot() +
   ) +
   theme(
     legend.position = 'bottom'
-  )
+  ) +
+  theme_map()
 
 
 # Kyoto Protocol  ---------------------------------------------------------
@@ -159,27 +160,26 @@ ggplot() +
 
 # As all the data is yearly we will do our analysis in terms of years
 kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
-kyoto_protocol_effective_years <- c(start = 2005, end = 2012)
-kyoto_protocol_length <- kyoto_protocol_effective_years['end'] - kyoto_protocol_effective_years['start']
+kyoto_start_year <- 2005
 
 # Check worldwide effect
-years <- country_ghg_emissions %>% select(year)
-
 world_ghg_emissions_ts <- country_ghg_emissions %>% 
   group_by(year) %>% 
   summarise(total_ghg_emissions_mtco2e = sum(total_ghg_emissions_mtco2e)) %>%
   as_tsibble(index=year)
 
-plot_world_ghg_emissions <- world_ghg_emissions_ts %>% 
+p <- world_ghg_emissions_ts %>% 
   autoplot(total_ghg_emissions_mtco2e) +
   geom_point() +
-  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed', colour='blue') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed', colour='blue') +
+  geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
   labs(
-    title = 'World GHG emissions',
+    title = paste0('World GHG emissions (', year_range$min_year, '-', year_range$max_year, ')'),
     x = 'Year',
     y = 'GHG emissions (mtco2e)'
-  ) 
-ggplotly(plot_world_ghg_emissions)
+  ) +
+  theme_gdocs()
+ggplotly(p)
 
 
 # Intervention analysis using Regression with ARIMA errors ----------------
@@ -195,7 +195,7 @@ ggplotly(plot_world_ghg_emissions)
 # were under the protocol for 2005
 arimaWithKyotoIntervention <- function(df_tsibble) {
   z <- df_tsibble %>% 
-    transmute(z = year >= kyoto_protocol_effective_years['start']) %>% 
+    transmute(z = year >= kyoto_start_year) %>% 
     pull(z) %>%
     as.numeric()
   fit <- df_tsibble %>% auto.arima(xreg=z)
@@ -205,17 +205,20 @@ arimaWithKyotoIntervention <- function(df_tsibble) {
 world_ghg_emissions_arima <- world_ghg_emissions_ts %>% arimaWithKyotoIntervention()
 
 # Plot fitted values. Looks pretty good
-plot_world_arima <- world_ghg_emissions_arima$x %>% 
+p <- world_ghg_emissions_arima$x %>% 
   autoplot(series='Actual') +
   autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
-  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
+  geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
+  scale_x_continuous(breaks = seq(year_range$min_year, year_range$max_year, by = 1)) +
   labs(
     title = 'Fitted values from ARIMA on World GHG emissions',
     x = 'Year',
     y = 'GHG emissions (mtco2e)',
     colour = 'Type'
-  ) 
-ggplotly(plot_world_arima)
+  ) +
+  theme_hc()
+ggplotly(p)
 
 # https://stats.stackexchange.com/questions/8868/how-to-calculate-the-p-value-of-parameters-for-arima-model-in-r
 # (1-pnorm(abs(aa$coef)/sqrt(diag(aa$var.coef))))*2 or with coeftest
@@ -247,7 +250,7 @@ world_ghg_emissions_arima %>%
 # Canada left in Dec 15, 2012 but assume that the intervention still had an effect on canada's regulations even after
 
 
-# GHG emissions for top 80% countries over time - excluding Canada
+# GHG emissions for top 80% countries over time
 country_top_total_emissions_ts <-
   country_top_total_emissions %>% 
   select(country) %>% 
@@ -255,11 +258,11 @@ country_top_total_emissions_ts <-
   as_tsibble(key=country, index=year)
 
 # Plot emissions time series for each country
-plot_country_emissions <- 
+p <- 
   country_top_total_emissions_ts %>% 
   mutate(country = fct_reorder(country, total_ghg_emissions_mtco2e, tail, n=1, .desc=TRUE)) %>% 
   autoplot(total_ghg_emissions_mtco2e) +
-  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
   scale_x_continuous(breaks = seq(year_range$min_year, year_range$max_year, by = 1)) +
   labs(
     title = paste0('Total GHG emissions of countries making up ', percent_cutoff*100, '% of global GHG emission excluding Canada',
@@ -269,7 +272,7 @@ plot_country_emissions <-
     colour = 'Country'
   ) + 
   theme_hc()
-ggplotly(plot_country_emissions)
+ggplotly(p)
 
 # Create arima model per country
 countries <- country_top_total_emissions_ts %>% pull(country) %>% unique()
@@ -301,26 +304,29 @@ for (i in 1:length(countries)) {
 }
 
 # Only indonesia has significant xreg coefficient
-plot_country_emissions <- 
+p <- 
   country_top_total_emissions_ts %>% 
   filter(country %in% countries_arima_significant) %>% 
   ggplot(aes(x=year, y=total_ghg_emissions_mtco2e, colour=country)) +
   geom_line() +
-  geom_vline(xintercept=kyoto_protocol_effective_years['start'], linetype='dashed') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
   scale_x_continuous(breaks = seq(year_range$min_year, year_range$max_year, by = 1)) +
   labs(
-    title = paste0('Total GHG emissions of countries making up ', percent_cutoff*100, '% of global GHG emission excluding Canada',
+    title = paste0('GHG emissions of countries with significant p-values',
                    ' (', year_range$min_year, '-', year_range$max_year, ')'),
     y = 'GHG emission (mtco2e)',
     x = 'Year'
   ) + 
   theme_hc()
-ggplotly(plot_country_emissions)
+ggplotly(p)
 
 
 ## CONCLUSION: No Kyoto protocol has no significant impact in the mean change of countries ghg emissions, except for Indonesia
 # in this case it increased and however cannot definitively conclude that it was due to the event. In either case it definitely
 # did not decrease
+
+
+
 
 
 # Check country regulation activity -----------------------------------------------
@@ -332,19 +338,49 @@ regulations <- read_csv('data/raw/law_search/data.csv') %>%
            str_split(';')) 
 
 
-# Analyze differences in average yearly regulations before and after the kyoto intervention
-# TODO: starts counting regulations at earliest regulation which might not be good
-avg_regulations <- regulations %>% 
-  mutate(pre_kyoto = year < kyoto_protocol_effective_years['start']) %>% 
-  group_by(country, pre_kyoto) %>% 
-  summarise(avg_yearly_regulations = n() / abs(kyoto_protocol_effective_years['start'] - 
-                                               ifelse(pre_kyoto[1], min(regulations$year), max(regulations$year)))) %>% 
-  mutate(pre_kyoto = ifelse(pre_kyoto, 'pre_kyoto', 'post_kyoto')) %>% 
-  pivot_wider(names_from=pre_kyoto, values_from=avg_yearly_regulations) %>% 
-  mutate(avg_yearly_reg_diff = post_kyoto - pre_kyoto)
+# Analyze total number of regulations implemented after kyoto protocol between countries
+year_start <- kyoto_start_year - (max(regulations$year) - kyoto_start_year)
 
-avg_regulations %>% 
-  ggplot(aes(x=country, y=))
+regulations_compare <- regulations %>% 
+  filter(year >= year_start) %>% 
+  mutate(pre_kyoto = year < kyoto_start_year) %>% 
+  group_by(country, pre_kyoto) %>% 
+  summarise(number_regulations = n()) %>% 
+  mutate(pre_kyoto = ifelse(pre_kyoto, 'pre_kyoto', 'post_kyoto')) %>% 
+  pivot_wider(names_from=pre_kyoto, values_from=number_regulations) %>% 
+  mutate(pre_kyoto = replace_na(pre_kyoto, 0), 
+         post_kyoto = replace_na(post_kyoto, 0)) %>% 
+  ungroup()
+  
+
+# Plot difference in regulations post vs pre kyoto protocol
+regulations_compare %>% 
+  mutate(regulations_diff = post_kyoto - pre_kyoto) %>% 
+  mutate(country = fct_reorder(country, regulations_diff)) %>% 
+  ggplot(aes(x=regulations_diff)) +
+  geom_histogram(bins=30) +
+  labs(
+    title = 'Difference in number of regulations created before vs after the Kyoto Protocol',
+    x = 'Difference in number of regulations'
+  ) +
+  theme_minimal()
+
+
+# avg_regulations <- regulations %>% 
+#   mutate(pre_kyoto = year < kyoto_protocol_effective_years['start']) %>% 
+#   group_by(country, pre_kyoto) %>% 
+#   summarise(avg_yearly_regulations = n() / abs(kyoto_protocol_effective_years['start'] - 
+#                                                ifelse(pre_kyoto[1], 2005-14, max(regulations$year)))) %>% 
+#   mutate(pre_kyoto = ifelse(pre_kyoto, 'pre_kyoto', 'post_kyoto')) %>% 
+#   mutate(avg_yearly_regulations = replace(avg_yearly_regulations, ))
+#   pivot_wider(names_from=pre_kyoto, values_from=avg_yearly_regulations) %>% 
+#   mutate(avg_yearly_reg_diff = post_kyoto - pre_kyoto)
+# 
+# avg_regulations %>% 
+#   inner_join(country_top_total_emissions %>% select(country), by='country') %>% 
+#   ggplot(aes(x=country, y=avg_yearly_reg_diff)) +
+#   geom_bar(stat='identity') +
+#   coord_flip()
 
 
 
