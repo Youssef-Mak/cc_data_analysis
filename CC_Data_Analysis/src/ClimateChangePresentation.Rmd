@@ -1,19 +1,17 @@
 ---
-title: "Regulations on GHG emissions"
-subtitle: ''
-author: "Shadow Dogs Unleashed"
+title: "Emission Relationship"
+subtitle: 'An EDA '
+author: "Youssef, Shaafici, Thinh, Vinh"
 date: "`r Sys.Date()`"
-output: slidy_presentation
-  # html_document:
-  #   code_folding: hide
-  #   toc: True
-  #   toc_float: True
+output: 
+  slidy_presentation: default
+  ioslides_presentation: defaultslidy_presentation
 ---
 
 ```{r setup, include=FALSE, warning=FALSE, message=FALSE}
 
 # Set some options
-knitr::opts_chunk$set(echo = FALSE, fig.height = 8, fig.width = 10)
+knitr::opts_chunk$set(echo = FALSE, fig.height = 8, fig.width = 17)
 skimr::skim_with(numeric = list(hist = NULL))
 
 # load libraries
@@ -24,7 +22,7 @@ library(feasts)
 library(forecast)
 library(ggthemes)
 library(janitor)
-library(lmtest),,
+library(lmtest)
 library(lubridate)
 library(plotly)
 library(plyr)
@@ -34,14 +32,165 @@ library(tsibble)
 library(viridis)
 ```
 
-# Purpose
+# Objectives 
 
-Do regulations have any effect in reducing the amount of GHG emissions?
+- Identify a relationship between emissions and economy growth.
+
+- Identify a relationship between emission and environement damages
+
+- Identify protocol installment effect on government regulation activity
+
+- Identify relationship between environmental tax revenue and emission
+
+# Global Activity Growth Overview 
+
+![International Average Growth Added Plot](Plots/InterAvgGrowth.png)
 
 
-# Who are the biggest producers of GHG
+# Identifying Relationship between Emissions and Growth
 
-We can start with a high level view and plot the ghg emissions per country to determine if certain areas have much higher amounts of emissions compared to others and to get a basic sense of which countries pollute the most.
+- Time Series
+
+- Stationarizing 
+
+- Cross Correlation between Time Series
+
+# Stationarizing 
+
+- Statistical Properties constant over time
+  - Mean
+  - Variance 
+  - Autocorrelation, etc. 
+  
+# Raw Time Series
+
+![](Plots/USRawTS.png)
+
+# Stationarized
+
+![](Plots/USDiffTS.png)
+
+# Cross Correlation Tests
+
+- Stationarize TimeSeries by differencing
+
+- Test Stationarity using ADF and KPSS Test
+
+- CCF test
+
+# Cross Correlation
+
+![](Plots/XCorrUSPlot.png)
+
+# Cross Correlation between Emission and Total Growth
+
+![XCorr Emission and Total growth](Plots/XCorrCountryValEm.png)
+
+# LAG Histogram of XCorr Plot
+
+![LAG Histogram of XCorr Plot](Plots/XCorrCountryValEm.png)
+
+# Auto-Correlation Density at LAG 0
+
+![LAG Histogram of XCorr Plot](Plots/DensityLag0.png)
+
+# Identifying Relationship between Emmisions and Total Environmental Tax
+
+
+![LAG Histogram of XCorr Plot](Plots/EnvTax_EmPlot.png)
+
+
+# Insights Gained
+
+- Total Emissions at lag zero tend to have a positive effect on Economy Growth 
+
+- Non detemined relationship at non zero lags  
+
+- Movement in total env tax revenue in time t-x has an effect on emission in time t
+
+- Potentially indicating an emission reaction for increased environmental taxes
+
+
+# Shaafici Section
+
+# An investigation into the relationship between particulate damage and emissions
+
+# Definition
+
+Long Definition Particulate emissions damage is the damage due to exposure of a country’s population to ambient concentrations of particulates measuring less than 2.5 microns in diameter (PM2.5), ambient ozone pollution, and indoor concentrations of PM2.5 in households cooking with solid fuels. Damages are calculated as foregone labor income due to premature death. Estimates of health impacts from the Global Burden of Disease Study 2016. Data for other years have been extrapolated from trends in mortality rates.
+
+# Statistical concepts
+ Within the national accounting framework, air pollution damages are estimated following a human capital approach. Damages from premature mortality are calculated as the present value of lost income during working age, 15-64. Premature mortality among children is valued by adjusting for years until working age and discounting more heavily into the future. Estimates are for both urban and rural areas. Exposure to household air pollution is proxied by the number of households in each country cooking with solid fuels.
+ 
+# Why its relevant to developement
+
+ Air pollution places a major burden on world health. In many places, including cities but also nearby rural areas, exposure to air pollution exposure is the main environmental threat to health. Long-term exposure to high levels of fine particulates in the air contributes to a range of health effects, including respiratory diseases, lung cancer, and heart disease, resulting in 3.2 million deaths annually according to the Global Burden of Disease 2010 study. Not only does exposure to air pollution affect the health of the world’s people, it also carries huge economic costs and represents a drag on development, particularly for low and middle income countries and vulnerable segments of the population such as children and the elderly.
+
+# Limitations
+Labor productivity losses, as calculated within the framework of adjusted net savings, represent only part of the economic costs of air pollution and should be interpreted as a lower-end estimate. 
+
+# Source
+# Mean Average for the world
+![](../PLOTSHAAFICI/ArimaParticulate.png)
+
+![](../PLOTSHAAFICI/WorldPlotAdjustedSavings.png)
+# By region
+![](../PLOTSHAAFICI/AfricaPlot.png)
+
+![](../PLOTSHAAFICI/AsiaPacific.png)
+
+![](../PLOTSHAAFICI/Europe.png)
+# North America
+![](../PLOTSHAAFICI/North America.png)
+# Oceania
+![](../PLOTSHAAFICI/OceaniaPlot.png)
+
+![](../PLOTSHAAFICI/WorldRelationPlot.png)
+# Europe pacific
+
+![](../PLOTSHAAFICI/EuropeBar.png)
+
+
+# East Asia
+
+![](../PLOTSHAAFICI/EastAsiaBar.png)
+
+
+# Middle East North Africa
+
+![](../PLOTSHAAFICI/MiddleEastNorthAfricaBar.png)
+
+# North America
+
+![](../PLOTSHAAFICI/NorthAmericaBar.png)
+
+# Oceania
+
+![](../PLOTSHAAFICI/OceaniaPlot.png)
+
+# Sub Saharan Africa
+
+![](../PLOTSHAAFICI/SubAfricaBar.png)
+
+# Limitations with respect to the project
+
+We had to make the decision to pick either APD in terms of percent of gross national income
+or in total USD.Countries that are wealthier will have a higher cost then poorer countries by virtue of being larger.
+Also GNI shows the relative burden to each country. But as all countries right now grow, even if the cost of particulate damage
+rises it will be outgrown by the wealth of the country. 
+
+# Conclusions made
+
+Because of the fact that most countries ADP is going down and is negatively correlated, and the arima model shows that 
+ADP will continue to decrease, The growth of each country is worth more than trying to curb the issue.
+
+
+
+# Did the Kyoto Protocol have an effect on GHG emissions?
+
+- International agreement to reduce greenhouse gas emissions 
+
+- Adopted on February 16, 2005
 
 ```{r, warning=FALSE, message=FALSE}
 # Load green house emissions data
@@ -110,25 +259,118 @@ world_emission_data <- world_data %>%
   select(long, lat, group, region, total_ghg_emissions_mtco2e) %>% 
   na.omit()
 
-ggplot() +
-  geom_polygon(data=world_data, aes(x=long, y=lat, group=group), fill='white', colour='grey', size=0.01) +
-  coord_equal() +
-  geom_polygon(data=world_emission_data, aes(x=long, y=lat, group=group, fill=total_ghg_emissions_mtco2e)) +
-  scale_fill_viridis(name = 'Total GHG emissions (mtco2e)') +
-  labs(
-    title = 'Total GHG emissions',
-    subtitle = paste0(year_range$min_year, '-', year_range$max_year)
-  ) +
-  theme(
-    legend.position = 'bottom'
-  ) +
-  theme_map()
+# ggplot() +
+#   geom_polygon(data=world_data, aes(x=long, y=lat, group=group), fill='white', colour='grey', size=0.01) +
+#   coord_equal() +
+#   geom_polygon(data=world_emission_data, aes(x=long, y=lat, group=group, fill=total_ghg_emissions_mtco2e)) +
+#   scale_fill_viridis(name = 'Total GHG emissions (mtco2e)') +
+#   labs(
+#     title = 'Total GHG emissions',
+#     subtitle = paste0(year_range$min_year, '-', year_range$max_year)
+#   ) +
+#   theme(
+#     legend.position = 'bottom'
+#   ) +
+#   theme_map()
 ```
 
-China and US have are by far the greatest GHG emitters. Next, we see Brazil, Russia, India, Japan, and others with noticeable amounts of GHG emissions. The other countries seem to have much lower amounts of emissions, however it looks like overall the more developed countries are emitting more.
 
-We will limit our analysis to the countries with the highest total GHG emissions. We decided that it would be more insightful to analyze this subset of countries as they have the most impact on climate change. For our subset, we chose the top countries making up 80% of the global GHG emissions.
 
+
+# Global effect
+
+```{r, warning=FALSE, message=FALSE}
+# As all the data is yearly we will do our analysis in terms of years
+kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
+kyoto_start_year <- 2005
+
+# Check worldwide effect
+world_ghg_emissions_ts <- country_ghg_emissions %>% 
+  group_by(year) %>% 
+  summarise(total_ghg_emissions_mtco2e = sum(total_ghg_emissions_mtco2e)) %>%
+  as_tsibble(index=year)
+
+world_ghg_emissions_ts %>% 
+  autoplot(total_ghg_emissions_mtco2e) +
+  geom_point() +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed', colour='blue') +
+  geom_text(aes(x=kyoto_start_year, y=max(total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
+  labs(
+    title = paste0('World GHG emissions'),
+    subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
+    x = 'Year',
+    y = 'GHG emissions (mtco2e)'
+  ) +
+  theme_minimal()
+```
+
+
+# Global effect - Intervention analysis
+
+- $y_t = \beta_0 + \beta_1 x_t + \eta_t$ where $\eta'_t = \phi_1 \eta'_{t-1} + \varepsilon_t$ [1]
+
+```{r, message=FALSE, warning=FALSE}
+# Fit regression with arima errors with intervention variable
+arimaWithKyotoIntervention <- function(df_tsibble) {
+  z <- df_tsibble %>% 
+    transmute(z = year >= kyoto_start_year) %>% 
+    pull(z) %>%
+    as.numeric()
+  fit <- df_tsibble %>% auto.arima(xreg=z)
+  return (fit)
+}
+
+world_ghg_emissions_arima <- world_ghg_emissions_ts %>% arimaWithKyotoIntervention()
+
+# Plot fitted values. Looks pretty good
+world_ghg_emissions_arima$x %>%
+  autoplot(series='Actual') +
+  autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
+  geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
+  labs(
+    title = 'Fitted values from ARIMA on World GHG emissions',
+    subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
+    x = 'Year',
+    y = 'GHG emissions (mtco2e)',
+    colour = 'Type'
+  ) +
+  theme_minimal()
+
+# Display arima model
+# summary(world_ghg_emissions_arima)
+```
+
+
+<!-- # Global effect - Model residuals -->
+
+<!-- ```{r, message=FALSE, warning=FALSE} -->
+<!-- world_ghg_emissions_arima %>% checkresiduals() -->
+<!-- # world_ghg_emissions_arima %>% -->
+<!-- #   residuals(type='innovation') %>% -->
+<!-- #   as_tsibble() %>% -->
+<!-- #   ggplot(aes(sample=value)) + -->
+<!-- #   stat_qq() + stat_qq_line() + -->
+<!-- #   ggtitle('qq-plot of the residuals') -->
+<!-- ``` -->
+
+
+# Global effect - Significance of post kyoto intervention
+
+```{r, message=FALSE, warning=FALSE}
+# Check p-values of coefficients
+coeftest(world_ghg_emissions_arima)
+```
+
+- P-value of 0.5867 so not significant
+
+- No difference in pre vs post Kyoto Protocol 
+
+
+
+# Country effect
+
+- Smaller subset of countries of interest to analyze
 
 ``` {r, message=FALSE, warning=FALSE}
 # View only top n percent countries based on ghg emissions
@@ -157,111 +399,9 @@ country_top_total_emissions %>%
 
 ```
 
-As shown in the above plot, there are 29 countries making up the top 80% of global emissions. US and China account for nearly 1/3 of global emissions at 31% while the other countries are more balanced in emissions.
 
 
-# Did the Kyoto Protocol have an effect on GHG emissions?
-
-Now that we have a subset of important countries to analyze, we want to determine if regulations have any impact on reducing GHG emissions. In particular, we will focus on the Kyoto Protocol which was an international treaty where parties are committed to reduce green house gas emissions. The Kyoto Protocol was effective as of February 16, 2005 and is currently ongoing for its second commitment period. We have manually checked on the United Nations Climate Change website that all 29 countries of interest were part of the protocol as of 2005 (as the data was not available for use). 
-
-Note that Canada withdrew in December 2012 however for this analysis we will examine the impact of the protocol being implemented as of 2005 and onward. As well, since the emission data is yearly we will assume that the emissions for year 2005 were under the Kyoto Protocol.
-
-
-## Global effect
-
-First let's see how the Kyoto Protocol effected the global GHG emissions.
-
-```{r, warning=FALSE, message=FALSE}
-# As all the data is yearly we will do our analysis in terms of years
-kyoto_protocol_effective_date <- c(start = ymd("2005-02-16"), end=ymd("2012-12-31"))
-kyoto_start_year <- 2005
-
-# Check worldwide effect
-world_ghg_emissions_ts <- country_ghg_emissions %>% 
-  group_by(year) %>% 
-  summarise(total_ghg_emissions_mtco2e = sum(total_ghg_emissions_mtco2e)) %>%
-  as_tsibble(index=year)
-
-world_ghg_emissions_ts %>% 
-  autoplot(total_ghg_emissions_mtco2e) +
-  geom_point() +
-  geom_vline(xintercept=kyoto_start_year, linetype='dashed', colour='blue') +
-  geom_text(aes(x=kyoto_start_year, y=max(total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
-  labs(
-    title = paste0('World GHG emissions'),
-    subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
-    x = 'Year',
-    y = 'GHG emissions (mtco2e)'
-  ) +
-  theme_minimal()
-```
-
-Just from eyeballing the plot it doesn't look like the Kyoto Protocol had any impact on global GHG emissions as it seems to be climbing at the same rate as it was before the protocol. To confirm this, we will attempt to apply intervention analysis by modelling the time series as a regression with arima errors and determine if the coefficient is significant. The model is expressed as:
-
-$y_t = \beta_0 + \beta_1 x_t + \eta_t$ where $\eta'_t = \phi_1 \eta'_{t-1} + \varepsilon_t$   [1]
-
-$x_t$ is a vector of 0,1 where it's 0 if is before the Kyoto Protocol effective date and 1 if after.
-
-Note, this simply checks for constant changes to the mean value.
-
-With this definition we get the following regression with arima errors model
-```{r, message=FALSE, warning=FALSE}
-# Fit regression with arima errors with intervention variable
-arimaWithKyotoIntervention <- function(df_tsibble) {
-  z <- df_tsibble %>% 
-    transmute(z = year >= kyoto_start_year) %>% 
-    pull(z) %>%
-    as.numeric()
-  fit <- df_tsibble %>% auto.arima(xreg=z)
-  return (fit)
-}
-
-world_ghg_emissions_arima <- world_ghg_emissions_ts %>% arimaWithKyotoIntervention()
-
-# # Plot fitted values. Looks pretty good
-# world_ghg_emissions_arima$x %>% 
-#   autoplot(series='Actual') +
-#   autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
-#   geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
-#   geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
-#   labs(
-#     title = 'Fitted values from ARIMA on World GHG emissions',
-#     subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
-#     x = 'Year',
-#     y = 'GHG emissions (mtco2e)',
-#     colour = 'Type'
-#   ) +
-#   theme_minimal()
-
-# Display arima model
-summary(world_ghg_emissions_arima)
-```
-
-The best model found using the AIC is a regression with errors ARIMA(2,0,0) meaning it's auto regressive only. It has fairly good performance metrics on the training set. Now we analyze residuals.
-
-```{r, message=FALSE, warning=FALSE}
-world_ghg_emissions_arima %>% checkresiduals()
-world_ghg_emissions_arima %>%
-  residuals(type='innovation') %>%
-  as_tsibble() %>%
-  ggplot(aes(sample=value)) +
-  stat_qq() + stat_qq_line() +
-  ggtitle('qq-plot of the residuals')
-```
-
-From the Ljung-Box test we get a p-value of 0.1408 which is fairly high so we can conclude that there's no autocorrelation between the errors. As well, the residuals seem to follow a normal distribution from the qq-plot shown and also seems like random noise which indicates that the model has captured the proper patterns. Thus, the regression model with arima errors does a good job of modelling the time series.
-
-```{r, message=FALSE, warning=FALSE}
-# Check p-values of coefficients
-coeftest(world_ghg_emissions_arima)
-```
-
-From the output above of the p-values for the parameters it shows that xreg is not significant at all with a very high p-value of 0.5867. Thus we can conclude since the xreg parameter was not significant, then it does not add much information for the model and that the period after the Kyoto Protocol start date was not much different from before. Therefore the Kyoto Protocol didn't have much impact on global GHG emissions!
-
-
-## Per country effect
-
-We suspect that this might not be true for certain countries. Some countries might have actually shown a significant change in their ghg emissions after the Kyoto Protocol. We will apply the same process as we did for World emissions but for our 29 countries of interest. Let's start by viewing the ghg emissions over time for all countries.
+# Country effect - Emissions over time
 
 ```{r, message=FALSE, warning=FALSE}
 # GHG emissions for top 80% countries over time
@@ -285,11 +425,10 @@ p <-
     y = 'GHG emission (mtco2e)',
     x = 'Year'
   ) + 
-  theme_hc()
+  theme_minimal()
 ggplotly(p)
 ```
 
-By eyeballing the plot, it does not seem like any single country's GHG emissions changed much after the Kyoto Protocol in 2005. We can determine the significance by modelling all the countries each with a regression with arima errors. As we are doing multiple hypothesis tests, we will have to be more careful and apply the Bonferroni correction using an an alpha of $0.05 / n$ where $n$ is the number of tests. Note, there is some controversy about this correction however it is simple for now.
 
 ```{r, warning=FALSE, error=FALSE}
 # Create arima model per country
@@ -312,13 +451,14 @@ for (i in 1:length(countries)) {
   country <- countries[[i]]
   p_val <- coeftest(countries_arima[[country]])['xreg','Pr(>|z|)']
   if (p_val < alpha) {
-    print(paste0(country, ' P-value: ', p_val))
+    # print(paste0(country, ' P-value: ', p_val))
     countries_arima_significant <- c(countries_arima_significant, country)
   }
 }
 ```
 
-From the output Indonesia is the only country that had a significant p-value, in this case of 6.02e-09 which is extremely significant. Let's view its emissions overtime to see what was found.
+
+# Country effect - significant models
 
 ```{r, message=FALSE, warning=FALSE}
 p <- 
@@ -335,19 +475,19 @@ p <-
     y = 'GHG emission (mtco2e)',
     x = 'Year'
   ) + 
-  theme_hc()
+  theme_minimal()
 ggplotly(p)
 ```
 
-Since 2005, Indonesia has had a major increase in its GHG emissions and so the Kyoto Protocol doesn't seem to have had an effect in reducing Indonesia's GHG emissions. And neither did it have an effect for any of the other 28 countries either as they had non-significant p-values. Therefore, we can conclude that even at the per country level the Kyoto Protocol doesn't seem to have had an impact in reducing GHG emissions. This confirms what we initially saw from the plot above as well.
+
+# Kyoto Protocol on regulation activity
+
+- What about Country regulation activity after Kyoto protocol?
+
+- Were countries more active in creating climate change related regulations?
 
 
-## Kyoto Protocol effects on regulations
-
-So even after the Kyoto Protocol was implemented there was no significant change in GHG emissions, but how active were countries in creating regulations relating to climate change after the Kyoto protocol was put into place?
-
-We can attempt to answer this question by simply viewing the number of regulations total that were put into place in between 2005-2019 and 1991-2005. We can compare the number of regulations created between Kyoto Protocol start until present date with between 1991 to Kyoto Protocol start. This gives 14 years on either sides pre/post protocol to compare with. For this analysis, we will include all countries.
-
+# Compare number of regulations before vs after
 
 ```{r, message=FALSE, warning=FALSE}
 regulations <- read_csv('../data/raw/law_search/data.csv') %>% 
@@ -388,7 +528,7 @@ regulations_compare %>%
 ```
 
 
-Looks like there have been many more regulations that have been created after 2005 than before 2005 for the same time ranges. Just to confirm we will do a paired t-test of difference of means
+# T-test on regulation activity
 
 ```{r}
 t.test(x = regulations_compare$pre_kyoto, 
@@ -398,36 +538,24 @@ t.test(x = regulations_compare$pre_kyoto,
        var.equal = FALSE)
 ```
 
-As expected from just viewing the data, the p-value is extremely low of 2.2e-16 so we reject the null and we can say the means are significantly different from each other. This allows us to conclude that yes from 2005-2019 there have been more regulations than in 1991-2005 created by countries indicating that they are more active in climate change prevention, however we cannot necessarily conclude that it was due to the Kyoto Protocol. Note, we did not take into account the types or impacts of each individual regulation.
+
 
 
 # Conclusion
 
-Overall, no the Kyoto Protocol did not have any significant impact on the reduction of GHG emissions however countries have been more active in creating regulations concerning climate change since the Kyoto Protocol was initiated, whether it was due to the Kyoto Protocol or not. So even though countries have been more active, it doesn't show in the GHG emissions. This could be due to either regulations aren't strict enough or perhaps targeted parties, or industries aren't following the regulations, or even that the regulations aren't targeting the biggest causes of GHG emissions. However, regardless of the reason we can definitely conclude that there needs to be more effort in order to reduce GHG emissions and that prior efforts have had little effect.
+- Kyoto Protocol did not have any significant impact on reducing GHG emissions
 
-
-# Assumptions/Comments
-
-- A better method for Intervention Analysis could've been applied to compare the time series before and after the Kyoto Protocol adoption
-
-- The exact GHG emissions used was total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e as this included all emissions contributing to climate change
-
-- Better method for handling multiple hypothesis testing could've been applied. In this case, even if we did not account for it none of the results would've changed
-
-- For regulations per country, each regulation was counted equally and we did not take into account how one regulation has a larger impact than others in terms of what the regulation actually does
-
-- 80% top country ghg emissions chosen was a bit arbitrary 
-
-- Not all countries were admitted to the Kyoto Protocol at the same time at 2005. Since the data was not available for use we made the assumption that they all joined at 2005.
+- Higher regulation activity after the Protocol
 
 
 # Suggestions for further work
 
-Acquire monthly data to give more data points
+- View GHG emissions per capita instead. Population grew from 6.5 billion in 2005 to 7.5 billion in 2019.
 
-View GHG emissions per capita instead. Population rises exponentially and has grown by a lot 6.5B in 2005 to 7.5B in 2019 so 1B change so of course we would expect that to cause greater emissions. We wouldn't be surprised to see that the emissions per capita actually were affected after the Kyoto Protocol in 2005.
+- Look at effects on regulations per subsector
 
-It would also be interesting to see the effects of regulations on a country and subsector view as we would expect certain industries to behave much more differently than others. The following plot shows for Canada the total GHG emissions per subsector and the points on the lines represent that a regulation was created on that year for that subsector. The second plot shows for Canada the energy subsector specifically along with actual names of regulations.
+
+# Suggestions for further work - Per subsector
 
 ```{r, warning=FALSE, message=FALSE}
 # TODO: Figure out way to cleanly store this as a tibble
@@ -499,27 +627,3 @@ p <- canada_ghg_emissions %>%
 ggplotly(p)
 ```
 
-```{r, warning=FALSE, message=FALSE}
-canada_electricity_ghg <- canada_ghg_emissions %>%
-  filter(str_detect(category, 'electricity')) %>%
-  select(-category)
-
-# Plot ghg emission with regulation names
-canada_electricity_ghg %>%
-  ggplot(aes(x=year, y=mt_co2e)) +
-  geom_line() +
-  geom_point(
-    data = canada_regulations %>% filter(categories == 'energy'),
-    aes(x=year, y=mt_co2e)
-  ) +
-  geom_text_repel(
-    data = canada_regulations %>% filter(categories == 'energy'),
-    aes(x=year, y=mt_co2e, label=name)
-  ) +
-  labs(
-    title = 'Canada GHG emissions in the energy sector and corresponding regulations',
-    x = 'Year',
-    y = 'GHG emission (megatonnes of CO2 equivalent)'
-  ) +
-  theme_minimal()
-```
