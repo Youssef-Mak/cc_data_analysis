@@ -1,5 +1,11 @@
+# R studio files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+
+# MacOS files
+.DS_Store
+
+# Large folder of reports
 CC_Data_Analysis/data/Reports/
