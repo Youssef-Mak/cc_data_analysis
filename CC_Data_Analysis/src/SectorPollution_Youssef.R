@@ -133,7 +133,7 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
     filter(activity == activity_ss) %>% 
     filter(country == country_name)
   
-  if (dim(country_growth_em)[1] == 0) {
+  if ((dim(country_growth_em)[1] == 0) | (nrow(country_growth_em) < 10)) {
     return(tribble(~ACF, ~LAG, ~country, ~dist, NA, NA, country_name, NA)) 
   }
   
@@ -155,6 +155,7 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   print("Done Making Time Series")
   
   print("making ccf")
+  # Movement in x(Growth) May have an effect on y(emission)
   ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
   print("Done making ccf")
   
@@ -188,7 +189,9 @@ processCsvData <- function(csv_filename) {
 # Reading Datasets --------------------------------------------------------
 
 # Employment per activity filename
-empl_per_act_df <- processCsvData(empl_per_act_filename)
+empl_per_act_df <- processCsvData(empl_per_act_filename) %>% 
+  dplyr::rename(activity = subject) %>% 
+  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
 
 # Country Emission DF (mtCO2)
 # TODO : Add sector emission columns  
@@ -207,6 +210,7 @@ reg_df <- processCsvData(regulation_filename)
 # Environmental tax per country DF
 env_tax_df <- processCsvData(emission_tax_filename) %>% 
   dplyr::rename(year = time) %>% 
+  dplyr::rename(activity = subject) %>% 
   select(-starts_with("indicator")) %>%
   dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
 
@@ -251,12 +255,22 @@ env_subject_mappings <- tribble(
   "OTH", "Other",
   "TOT", "Total Environmental Tax Generated"
 )
-env_tax_df <- env_tax_df %>% mutate(subject = mapvalues(subject, env_subject_mappings$code, env_subject_mappings$name))
+env_tax_df <- env_tax_df %>% mutate(activity = mapvalues(activity, env_subject_mappings$code, env_subject_mappings$name))
+
+
+empl_subject_mappings <- tribble(
+  ~code, ~name,
+  "AGR", "Agriculture",
+  "CONSTR", "Construction",
+  "INDUSCONSTR", "Industry Including Construction",
+  "MFG", "Manufacturing",
+  "SERV", "Services"
+)
+empl_per_act_df <- empl_per_act_df %>% mutate(subject = mapvalues(subject, empl_subject_mappings$code, empl_subject_mappings$name))
 
 country_mappings <-
   tribble(
     ~world_data, ~country_emissions,
-    # 'North Korea', 'Korea (North)',
     'South Korea', 'Korea, Rep. (South)', 
     'Russia', 'Russian Federation',
     'United Kingdom', 'UK',
@@ -287,8 +301,9 @@ countries_of_interest <-
 
 
 # Measure used should be Percent of total tax
-# env_tot_tax_df <- env_tax_df %>% 
-#   filter(measure == "PC_TOT_TAX")
+env_tot_tax_df <- env_tax_df %>%
+  filter(measure == "PC_TOT_TAX") %>% 
+  filter(activity == "Total Environmental Tax Generated")
 
 
 # International Subsector Growth Overview --------------------------------------------------
@@ -334,16 +349,51 @@ em_tot_growth_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_to
 em_growth_ss_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_growth_add_df, by = c("country" = "location", "year" = "year")) %>% 
   tidyr::drop_na(value)
 
+# Emission and Total Environment Tax Rev(perc of GDP)
+em_env_tax_merged_df <- dplyr::left_join(total_country_ghg_emissions, env_tot_tax_df, by = c("country" = "location", "year" = "year")) %>% 
+  tidyr::drop_na(value)
+
+# CCF ANALYSIS FOR COUNTRY EMISSION VS ENV TAX ----------------------------
+
+# We're especially concerned about the lag in this case
+countries_em_tax <- unique(em_env_tax_merged_df$country)
+countries_em_tax_ccf_res <- tribble()
+for (country in countries_em_tax) {
+  print(country)
+  ccf_res <- findTotalCrossCorr(em_env_tax_merged_df, country, "Total Environmental Tax Generated")
+  countries_em_tax_ccf_res <- bind_rows(countries_em_tax_ccf_res, ccf_res)
+}
+
+countries_em_tax_ccf_res %>%
+  ggplot(
+    aes(
+      x = (LAG),
+      y = (ACF),
+      color = country
+    )
+  ) +
+  geom_point(size = 3) +
+  labs(
+    x = "LAG (Delay between correlation)",
+    y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Between Environmental Tax and Total Emissions Time Series"
+  )
+
+
+
+# CCF ANALYSIS FOR COUNTRY GROWTH vs EMISIONS ------------------------------------------------------------
+
 # Loop through countries of interest
-countries_ccf_res <- tribble()
+countries_gr_em_ccf_res <- tribble()
 for (i in 1:nrow(countries_of_interest)) {
   country <- countries_of_interest[i,]$country
   print(country)
   ccf_res <- findTotalCrossCorr(em_tot_growth_merged_df, country)
-  countries_ccf_res <- bind_rows(countries_ccf_res, ccf_res)
+  countries_ccf_res <- bind_rows(countries_gr_em_ccf_res, ccf_res)
 }
 
-countries_ccf_res %>%
+countries_gr_em_ccf_res %>%
   ggplot(
     aes(
       x = (LAG),
