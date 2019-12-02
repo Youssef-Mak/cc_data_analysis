@@ -210,7 +210,7 @@ WorldRelationPlot <-WorldRelation %>%
        title = "World stats")  + 
   scale_y_discrete(limits = seq(from = 0,to = max(WorldRelation$value), by = 5))
 WorldRelationPlot
-
+library(htmltools)
 library(tmap)
 library(sf)
 library(spData)
@@ -232,7 +232,7 @@ GetCategory <- function(CountryName)
     #else if(str_detect(CountryName,PosInc)){category = "Positive Increasing"}
     else if(str_detect(CountryName,PosDec)){category = "Positive Decreasing"}
     else if(str_detect(CountryName,NoInfo)){category = "No Info"}
-    else if(str_detect(CountryName,both)){category = "both"}
+    else if(str_detect(CountryName,both)){category = "Both"}
     else{category = "WTF"}
       }
   return(category)
