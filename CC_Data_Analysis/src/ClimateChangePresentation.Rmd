@@ -24,7 +24,7 @@ library(feasts)
 library(forecast)
 library(ggthemes)
 library(janitor)
-library(lmtest)
+library(lmtest),,
 library(lubridate)
 library(plotly)
 library(plyr)
@@ -523,17 +523,3 @@ canada_electricity_ghg %>%
   ) +
   theme_minimal()
 ```
-
-
-
-# References
-
-[1] https://otexts.com/fpp2/regarima.html
-
-
-# Appendix: sessionInfo
-
-```{r}
-sessionInfo()
-```
-
