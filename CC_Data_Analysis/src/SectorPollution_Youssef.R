@@ -142,14 +142,17 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   
   print("Making Time series")
   country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+  print("Made ts Call")
   country_Growth_TimeSeries <- country_growth_ts_obj$ts
   country_Growth_diff <- country_growth_ts_obj$diff
   print(country_Growth_TimeSeries)
   
   country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
+  print("Made ts Calls")
   country_Emission_TimeSeries <- country_Emission_ts_obj$ts
   country_Emission_diff <- country_Emission_ts_obj$diff
   print(country_Emission_TimeSeries)
+  print("Done Making Time Series")
   
   print("making ccf")
   ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
@@ -174,16 +177,15 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   
 }
 
+processCsvData <- function(csv_filename) {
+  csv_df <- read_csv(csv_filename) %>% 
+    clean_names()
+  return(csv_df)
+}
+
 
 
 # Reading Datasets --------------------------------------------------------
-
-processCsvData <- function(csv_filename) {
-  csv_df <- read.csv(csv_filename) %>% 
-    clean_names() %>% 
-    na.omit()
-  return(csv_df)
-}
 
 # Employment per activity filename
 empl_per_act_df <- processCsvData(empl_per_act_filename)
@@ -213,7 +215,7 @@ coun_growth_add_df <- processCsvData(activity_value_filename) %>%
   dplyr::rename(activity = subject) %>% 
   dplyr::rename(year = time) %>% 
   select(-starts_with("indicator")) %>% # Remove Indicator 
-  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en')) %>% 
+  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en')) %>%
   filter(measure == "AGRWTH")
 
 
@@ -325,10 +327,12 @@ coun_tot_growth_add_df <- coun_growth_add_df %>%
   # %>% dplyr::summarise(average_val = mean(value))
   
 # Emission and TOTAL growth per country merged df
-em_tot_growth_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_tot_growth_add_df, by = c("country" = "location", "year" = "year"))
+em_tot_growth_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_tot_growth_add_df, by = c("country" = "location", "year" = "year")) %>% 
+  tidyr::drop_na(value)
 
 # Emission and SUBSECTOR growth per country merged df
-em_growth_ss_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_growth_add_df, by = c("country" = "location", "year" = "year"))
+em_growth_ss_merged_df <- dplyr::left_join(detail_country_ghg_emission, coun_growth_add_df, by = c("country" = "location", "year" = "year")) %>% 
+  tidyr::drop_na(value)
 
 # Loop through countries of interest
 countries_ccf_res <- tribble()
