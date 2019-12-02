@@ -39,6 +39,143 @@ no2_per_sect <- "data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.cs
 gge_per_sect <- "data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"
 
 
+# FUNCTION DEFINITIONS ---------------------------------------------------------------
+
+# Find minimal distance of acf between two bounds
+findSignificance <- function(acf, upper_bound, lower_bound) {
+  print("ACF")
+  print(acf)
+  print("Upp bound")
+  print(upper_bound)
+  print("Lower bound")
+  print(lower_bound)
+  if ( acf >= upper_bound) {
+    return(acf - upper_bound)
+  } else if (acf <= lower_bound) {
+    return(abs(acf - lower_bound))
+  } else {
+    return((-1) * min(abs(upper_bound - acf), abs(lower_bound - acf)))
+  }
+}
+
+
+
+# Trend Stationarize a time series
+stationarize <- function(time_series) {
+  
+  adf_test <- time_series %>% adf.test()
+  adf_p <- adf_test$p.value
+  diff <- 0
+  print("P value")
+  print(adf_p)
+  # Low p-value indicating stationary
+  while ((!is.na(adf_p)) & (adf_p > 0.05)) {
+    print("--------------------------- IN adf LOOP --------------------------- ")
+    time_series <- time_series %>% diff()
+    diff <- diff + 1 
+    adf_test <- time_series %>% adf.test()
+    adf_p <- adf_test$p.value
+  }
+  
+  kpss_test <- time_series %>% kpss.test()
+  kpss_p <- kpss_test$p.value
+  print("P value")
+  print(kpss_p)
+  # High p-value indicating non-trend-stationary
+  while ((!is.na(kpss_p)) & kpss_p < 0.05) {
+    print("--------------------------- IN kpss LOOP --------------------------- ")
+    time_series <- time_series %>% diff()
+    diff <- diff + 1
+    kpss_test <- time_series %>% kpss.test()
+    kpss_p <- kpss_test$p.value
+  }
+  
+  print("Done stationarizing")
+  return(list(ts = time_series, diff = diff))
+}
+
+# Plots Time Series
+plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+  
+  country_growth_em <- em_growth_df %>% 
+    filter(activity == activity_ss) %>% 
+    filter(country == country_name)
+  
+  min_year <- min(country_growth_em$year)
+  print(min_year)
+  
+  country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+  country_Growth_TimeSeries <- country_growth_ts_obj$ts
+  country_Growth_diff <- country_growth_ts_obj$diff
+  print("-------------- DIFFF FOR GROWTH ------------------")
+  print(country_Growth_diff)
+  
+  country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
+  country_Emission_TimeSeries <- country_Emission_ts_obj$ts
+  country_Emission_diff <- country_Emission_ts_obj$diff
+  print("-------------- DIFFF FOR Emissions ------------------")
+  print(country_Emission_diff)
+  
+  col_name <- paste("Country Growth TimeSeries With Difference ",country_Growth_diff) # I want to put difference as col name so its  in plot title
+  bound_ts <- cbind("Country Growth TimeSeries With Difference " = country_Growth_TimeSeries, 
+                    "Country Emission TimeSeries With Difference " = country_Emission_TimeSeries)
+  p <- autoplot(bound_ts, facets=TRUE) +
+    xlab("Year") + ylab("") +
+    ggtitle(paste("Country Growth vs Emission for ", country_name))
+  
+  return(p)
+}
+
+# Find Cross Correlation
+findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+  
+  country_growth_em <- em_growth_df %>% 
+    filter(activity == activity_ss) %>% 
+    filter(country == country_name)
+  
+  if (dim(country_growth_em)[1] == 0) {
+    return(tribble(~ACF, ~LAG, ~country, ~dist, NA, NA, country_name, NA)) 
+  }
+  
+  min_year <- min(country_growth_em$year)
+  print(min_year)
+  
+  print("Making Time series")
+  country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+  country_Growth_TimeSeries <- country_growth_ts_obj$ts
+  country_Growth_diff <- country_growth_ts_obj$diff
+  print(country_Growth_TimeSeries)
+  
+  country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
+  country_Emission_TimeSeries <- country_Emission_ts_obj$ts
+  country_Emission_diff <- country_Emission_ts_obj$diff
+  print(country_Emission_TimeSeries)
+  
+  print("making ccf")
+  ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+  print("Done making ccf")
+  
+  diff_length <- sqrt((country_Growth_diff^2) + (country_Emission_diff^2))
+  
+  # Critical Values at 5% conf Level = +-2/sqrt(n) (assuming normal distribution of ACF) (alpha = 0.05)
+  crit_val_lb <- (-2 / sqrt(ccf2$n.used))
+  crit_val_ub <- (2 / sqrt(ccf2$n.used))
+  
+  print("making xcorr")
+  xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
+    mutate(country = country_name) %>%
+    mutate(activity = activity_ss) %>% 
+    mutate(diff = (diff_length)) %>% 
+    mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>% 
+    filter(ACF >= crit_val_ub | ACF <= crit_val_lb)
+  
+  print("Done making xcorr")
+  return(xcorrDF)
+  
+}
+
+
+
 # Reading Datasets --------------------------------------------------------
 
 processCsvData <- function(csv_filename) {
@@ -135,41 +272,6 @@ detail_country_ghg_emission <- detail_country_ghg_emission %>%
 # Get Countries of Interest -----------------------------------------------
 
 
-# Avg emissions of all types per country
-country_avg_emissions <- country_ghg_emissions %>% 
-  select(-year) %>% 
-  filter(country != 'World', !str_detect(country, 'European Union')) %>% 
-  group_by(country) %>% 
-  summarise_each(list(avg_ghg_emissions_mtco2e = mean))
-
-# View only top n percent countries based on ghg emissions
-percent_ghg <- 0.80
-country_top_avg_emissions <- country_avg_emissions %>% 
-  select(country, avg_ghg_emissions_mtco2e) %>% 
-  arrange(avg_ghg_emissions_mtco2e %>% desc()) %>%
-  mutate(cum_percent_ghg = cumsum(avg_ghg_emissions_mtco2e)/sum(avg_ghg_emissions_mtco2e),
-         percent_global_ghg_emissions = avg_ghg_emissions_mtco2e / sum(avg_ghg_emissions_mtco2e))%>% 
-  filter(cum_percent_ghg < percent_ghg) %>% 
-  select(-cum_percent_ghg)
-
-p <- country_top_avg_emissions %>%
-  select(country) %>%
-  inner_join(country_ghg_emissions,by='country') %>%
-  mutate(country = fct_reorder(country, total_ghg_emissions_mtco2e, tail, n=1, .desc=TRUE)) %>% 
-  ggplot(aes(x=year, y=total_ghg_emissions_mtco2e, colour=country)) +
-  geom_line() +
-  labs(
-    title = 'GHG emission per country',
-    y= 'GHG emission (MtCO2e)',
-    x = 'Year',
-    colour = 'Country'
-  ) +
-  theme_hc()
-
-ggplotly(p)
-
-top_countries_em <- unique(country_top_avg_emissions$country)
-top_countries_em
 all_countries_em <- unique(detail_country_ghg_emission$country)
 all_countries_em
 countries_growth <- unique(coun_growth_add_df$location)
@@ -182,24 +284,6 @@ countries_of_interest <-
   dplyr::rename(country = countries)
 
 
-
-# Thus these our countries of interest
-# countries_of_interest <-
-#   tribble(
-#     ~country,
-#     'United States',
-#     'China',
-#     'India',
-#     'Australia',
-#     'Chile',
-#     'Colombia',
-#     'Germany',
-#     'Japan',
-#     'Brazil',
-#     'Canada'
-#   )
-
-
 # Measure used should be Percent of total tax
 # env_tot_tax_df <- env_tax_df %>% 
 #   filter(measure == "PC_TOT_TAX")
@@ -208,7 +292,7 @@ countries_of_interest <-
 # International Subsector Growth Overview --------------------------------------------------
 
 # Per Activity Growth Added DF(total growth added per year per country)
-int_growth_added_df <- growth_added %>% 
+int_growth_added_df <- coun_growth_add_df %>% 
   dplyr::filter(activity!="Total Growth") %>% 
   dplyr::group_by(activity, year) %>% 
   dplyr::summarise(average_val = mean(value))
@@ -353,186 +437,30 @@ sk_ss_ccf_res %>%
 
 
 
-plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
-  
-  country_growth_em <- em_growth_df %>% 
-    filter(activity == activity_ss) %>% 
-    filter(country == country_name)
-  
-  min_year <- min(country_growth_em$year)
-  print(min_year)
-  
-  country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
-  country_Growth_TimeSeries <- country_growth_ts_obj$ts
-  country_Growth_diff <- country_growth_ts_obj$diff
-  print("-------------- DIFFF FOR GROWTH ------------------")
-  print(country_Growth_diff)
-  
-  country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
-  country_Emission_TimeSeries <- country_Emission_ts_obj$ts
-  country_Emission_diff <- country_Emission_ts_obj$diff
-  print("-------------- DIFFF FOR Emissions ------------------")
-  print(country_Emission_diff)
-  
-  col_name <- paste("Country Growth TimeSeries With Difference ",country_Growth_diff) # I want to put difference as col name so its  in plot title
-  bound_ts <- cbind("Country Growth TimeSeries With Difference " = country_Growth_TimeSeries, 
-                    "Country Emission TimeSeries With Difference " = country_Emission_TimeSeries)
-  p <- autoplot(bound_ts, facets=TRUE) +
-    xlab("Year") + ylab("") +
-    ggtitle(paste("Country Growth vs Emission for ", country_name))
-  
-  return(p)
-}
 
 
-# Find cross correlations between Total Growth and And Emissions for Given Country
-findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
-  
-  country_growth_em <- em_growth_df %>% 
-    filter(activity == activity_ss) %>% 
-    filter(country == country_name)
-  
-  if (dim(country_growth_em)[1] == 0) {
-   return(tribble(~ACF, ~LAG, ~country, ~dist, NA, NA, country_name, NA)) 
-  }
-  
-  min_year <- min(country_growth_em$year)
-  print(min_year)
-  
-  print("Making Time series")
-  country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
-  country_Growth_TimeSeries <- country_growth_ts_obj$ts
-  country_Growth_diff <- country_growth_ts_obj$diff
-  print(country_Growth_TimeSeries)
-  
-  country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
-  country_Emission_TimeSeries <- country_Emission_ts_obj$ts
-  country_Emission_diff <- country_Emission_ts_obj$diff
-  print(country_Emission_TimeSeries)
-  
-  print("making ccf")
-  ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
-  print("Done making ccf")
-  
-  diff_length <- sqrt((country_Growth_diff^2) + (country_Emission_diff^2))
-  
-  # Critical Values at 5% conf Level = +-2/sqrt(n) (assuming normal distribution of ACF) (alpha = 0.05)
-  crit_val_lb <- (-2 / sqrt(ccf2$n.used))
-  crit_val_ub <- (2 / sqrt(ccf2$n.used))
-  
-  print("making xcorr")
-  xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
-    mutate(country = country_name) %>%
-    mutate(activity = activity_ss) %>% 
-    mutate(diff = (diff_length)) %>% 
-    mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>% 
-    filter(ACF >= crit_val_ub | ACF <= crit_val_lb)
-  
-  print("Done making xcorr")
-  return(xcorrDF)
-  
-}
-
-# Country Example
-country_growth_em <- em_tot_growth_merged_df %>% 
-  filter(activity == "Total Growth") %>% 
-  filter(country == "Luxembourg")
-
-min_year <- min(country_growth_em$year)
-print(min_year)
-
-country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) %>% stationarize()
-country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions, start = min_year) %>% stationarize()
-
-ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
-
-# Critical Values at 5% conf Level = +-2/sqrt(n) (assuming normal distribution of ACF)
-crit_val_lb <- (-2 / sqrt(ccf2$n.used))
-crit_val_ub <- (2 / sqrt(ccf2$n.used))
-
-df <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) 
-
-xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
-  mutate(country = "Luxembourg") %>%
-  mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>%
-  filter(ACF >= crit_val_ub | ACF <= crit_val_lb) 
-
-countries_ccf_res <- bind_rows(countries_ccf_res, xcorrDF)
-
-
-findSignificance <- function(acf, upper_bound, lower_bound) {
-  print("ACF")
-  print(acf)
-  print("Upp bound")
-  print(upper_bound)
-  print("Lower bound")
-  print(lower_bound)
-  if ( acf >= upper_bound) {
-    return(acf - upper_bound)
-  } else if (acf <= lower_bound) {
-    return(abs(acf - lower_bound))
-  } else {
-    return((-1) * min(abs(upper_bound - acf), abs(lower_bound - acf)))
-  }
-}
-
-
-
-  # Trend Stationarize a time series
-stationarize <- function(time_series) {
-  
-  adf_test <- time_series %>% adf.test()
-  adf_p <- adf_test$p.value
-  diff <- 0
-  print("P value")
-  print(adf_p)
-  while ((!is.na(adf_p)) & (adf_p > 0.05)) {
-    print("--------------------------- IN adf LOOP --------------------------- ")
-    time_series <- time_series %>% diff()
-    diff <- diff + 1 
-    adf_test <- time_series %>% adf.test()
-    adf_p <- adf_test$p.value
-  }
-  
-  kpss_test <- time_series %>% kpss.test()
-  kpss_p <- kpss_test$p.value
-  print("P value")
-  print(kpss_p)
-  while ((!is.na(kpss_p)) & kpss_p < 0.05) {
-    print("--------------------------- IN kpss LOOP --------------------------- ")
-    time_series <- time_series %>% diff()
-    diff <- diff + 1
-    kpss_test <- time_series %>% kpss.test()
-    kpss_p <- kpss_test$p.value
-  }
-  
-  print("Done stationarizing")
-  return(list(ts = time_series, diff = diff))
-}
-
-
-aus_growth_em <- agr_growth_em_df %>% filter(country == "Australia")
+aus_growth_em <- em_growth_ss_merged_df %>% filter(activity == "Agriculture and Fishery") %>% filter(country == "Australia")
 
 # First let's assume that Value added and environmental tax are independent to one another
 # to perform Pearson corelation test
 # We also assume there is a linear relationship between the two
 
 # Assume That both variables are continuous and linearly related (appears linear barring outliers)
-plot(aus_growth_em$value, aus_growth_em$agriculture_em)
+plot(aus_growth_em$value, aus_growth_em$agriculture_mt_co2e)
 
 # Assume variables follow a bivariate normal distribution
 qqnorm(aus_growth_em$value)
 qqline(aus_growth_em$value)
 
-qqnorm(aus_growth_em$agriculture_em)
-qqline(aus_growth_em$agriculture_em)
+qqnorm(aus_growth_em$agriculture_mt_co2e)
+qqline(aus_growth_em$agriculture_mt_co2e)
 
 # Assume variances are homogeneous (no cone shape scatter plot)
 
 # No Major outliers (check scatter plot)
 
 # Correlation test
-cor.test(aus_growth_em$value, aus_growth_em$agriculture_em, method = "pearson", data=aus_val_tax)
+cor.test(aus_growth_em$value, aus_growth_em$agriculture_mt_co2e, method = "pearson", data=aus_val_tax)
 
 # Output -> Non Significant negative corelation
 
@@ -540,18 +468,15 @@ cor.test(aus_growth_em$value, aus_growth_em$agriculture_em, method = "pearson", 
 
 # one for Added growth wrt years
 Agriculture_Growth_TimeSeries <- ts(aus_growth_em$value, start = 1996)
-Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_em, start = 1996)
-helo <- paste("Country Growth TimeSeries With Difference ", 5)
-print(helo)
-bound_ts <- cbind(as.symbol(helo) = Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries) 
-# bound_ts <- bound_ts %>% dplyr::rename(Agriculture_Growth_TimeSeries = "hello", Agriculture_Emission_TimeSeries = as.symbol(helo))
+Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_mt_co2e, start = 1996)
+bound_ts <- cbind( Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries)
 autoplot(bound_ts, facets=TRUE) +
   xlab("Year") + ylab("Hello") +
   ggtitle(paste("Time Series for Australian Agricultural Subsector", 5))
 
-scatter_ts_plot <- 
+scatter_ts_plot <-
   qplot(Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries, data=as.data.frame(bound_ts)) +
-  ylab("Emission (mtCO2)") + xlab("Added Growth") 
+  ylab("Emission (mtCO2)") + xlab("Added Growth")
 
 # Cross corelation testing for time series
 
@@ -603,11 +528,7 @@ xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% filter(ACF >= up | ACF
 print(ccf2$acf)
 # Negatively correlated in -2 lag
 # Positively correlated in -1 and -3 lag
-# Not sure if i took differencing into account TODO: apply ARIMA MOdel
-
-
-agr_arima_1 <- diff_agr_em_ts %>% 
-  model(arima = ARIMA())
+# Not sure if i took differencing into account TODO: apply ARIMA MOde
 
 
 
