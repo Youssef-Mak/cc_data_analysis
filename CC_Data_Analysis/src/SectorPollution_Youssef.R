@@ -266,7 +266,7 @@ empl_subject_mappings <- tribble(
   "MFG", "Manufacturing",
   "SERV", "Services"
 )
-empl_per_act_df <- empl_per_act_df %>% mutate(subject = mapvalues(subject, empl_subject_mappings$code, empl_subject_mappings$name))
+empl_per_act_df <- empl_per_act_df %>% mutate(activity = mapvalues(activity, empl_subject_mappings$code, empl_subject_mappings$name))
 
 country_mappings <-
   tribble(
@@ -390,7 +390,7 @@ for (i in 1:nrow(countries_of_interest)) {
   country <- countries_of_interest[i,]$country
   print(country)
   ccf_res <- findTotalCrossCorr(em_tot_growth_merged_df, country)
-  countries_ccf_res <- bind_rows(countries_gr_em_ccf_res, ccf_res)
+  countries_gr_em_ccf_res <- bind_rows(countries_gr_em_ccf_res, ccf_res)
 }
 
 countries_gr_em_ccf_res %>%
