@@ -6,6 +6,8 @@ library(tidyr)
 library(tidyverse)
 library(knitr)
 library(tsibble)
+library(stringr)
+library(stringi)
 library(feasts)
 library(fable)
 library(tibble)
@@ -57,22 +59,31 @@ WorldCCF <-   WorldDamageEmissions %>% group_split(country_code)
 
 GenerateCCF <- function(CountryTibble,emptyCCFList){
   country <- CountryTibble$country_code[[1]]
-  
+  EmissionsIncrease <- CountryTibble %>% select(year,total_greenhouse_gas_emissions_kt_of_co2_equivalent) %>% lm(total_greenhouse_gas_emissions_kt_of_co2_equivalent~ year,data =.)
+  EmissionsIncrease <- EmissionsIncrease$coefficients
+  EmissionsIncrease <- (EmissionsIncrease["year"] > 0) %>% unname()
   significanceLevel <- 2 / sqrt(nrow(CountryTibble))
   tempCCF <- ccf(CountryTibble$adjusted_savings_particulate_emission_damage_percent_of_gni,
                  CountryTibble$total_greenhouse_gas_emissions_kt_of_co2_equivalent,
                  plot = FALSE)
+  
   tempCCFLevels <- tibble(lag = as.vector(tempCCF$lag),
                           acf = as.vector(tempCCF$acf)) %>% filter(abs(acf) >= significanceLevel) 
   SigRelationship <- nrow(tempCCFLevels) > 0
+  
+  
+  
   PosSigRelationship <- tempCCFLevels %>% filter(acf >= significanceLevel) %>% nrow()
   PosSigRelationship <- PosSigRelationship > 0
+  
   NegSigRelationship <- tempCCFLevels %>% filter(acf <= -significanceLevel) %>% nrow()
   NegSigRelationship <- NegSigRelationship > 0
+  
   CCFRelationships <- tibble(country_code = country,
                              SigRelation = SigRelationship,
                              NegSigRelation = NegSigRelationship,
-                             PosSigRelation = PosSigRelationship
+                             PosSigRelation = PosSigRelationship,
+                             Increasing = EmissionsIncrease
                              )
   emptyCCFList <- list()
   tempCCF$snames <-paste0("Particulate damage and greenhouse gas emissions cross correlation for country:",
@@ -94,40 +105,66 @@ RegionalPlots <- list()
 WorldRelation <- list()
 WorldNotEnoughInfo <- list()
 WorldInteresting <- list()
-WorldCountryNeg <- list()
-WorldCountryPos<-list()
+WorldCountryNegInc <- list()
+WorldCountryNegDec <- list()
+WorldCountryPosInc<-list()
+WorldCountryPosDec<-list()
 WorldCountryNone <- list()
 for(region in RegionalRelationships)
 {
-  fixedRegion <- region %>% na.omit()%>%summarize(NumNeg =sum(NegSigRelation == TRUE),
-                                                  NumPos = sum(PosSigRelation == TRUE),
-                                                  NumNone = sum(SigRelation == FALSE))
+  fixedRegion <- region %>% na.omit()%>% mutate(PosInc = PosSigRelation && Increasing %% SigRelation,
+                                                PosDec = PosSigRelation && !Increasing && SigRelation,
+                                                NegInc = NegSigRelation && Increasing && SigRelation,
+                                                NegDec = NegSigRelation && !Increasing && SigRelation)%>%
+    summarize(NumNegInc =sum(NegInc == TRUE),
+              NumNegDec = sum(NegDec == TRUE),
+              NumPosInc = sum(PosInc == TRUE),
+              NumPosDec = sum(PosDec == TRUE),
+              NumNone = sum(SigRelation == FALSE))
   regionName = region$region[[1]]
-  NotEnoughInfoCountries <- region %>% filter(is.na(PosSigRelation)) %>% 
-    select(country_code,short_name,region)
   
   interestCountriesFromRegion <- region %>% 
     na.omit() %>% 
-    filter(PosSigRelation == NegSigRelation, PosSigRelation == TRUE) %>%
-    select(country_code,short_name,region)
+    filter(SigRelation == TRUE,PosSigRelation == TRUE, NegSigRelation == TRUE) %>%
+    select(country_code,short_name,region) 
   
-  PosCountries <- region %>% 
-    na.omit() %>% 
-    filter(PosSigRelation == TRUE, NegSigRelation == FALSE) %>%
-    select(country_code,short_name,region)
+  NotEnoughInfoCountries <- region %>% filter(is.na(PosSigRelation)) %>% 
+    select(country_code,short_name,region) %>% anti_join(interestCountriesFromRegion,by = c("country_code" = "country_code"))
   
-  NegCountries <- region %>% 
+  
+  PosCountriesInc <- region %>% 
     na.omit() %>% 
-    filter(NegSigRelation  == TRUE, PosSigRelation == FALSE) %>%
-    select(country_code,short_name,region)
+    filter(SigRelation == TRUE,PosSigRelation == TRUE, NegSigRelation == FALSE,Increasing == TRUE) %>%
+    select(country_code,short_name,region) %>% anti_join(interestCountriesFromRegion,by = c("country_code" = "country_code"))
+  
+  PosCountriesDec <- region %>% 
+    na.omit() %>% 
+    filter(SigRelation == TRUE,PosSigRelation == TRUE, NegSigRelation == FALSE,Increasing == FALSE) %>%
+    select(country_code,short_name,region) %>% anti_join(interestCountriesFromRegion,by = c("country_code" = "country_code"))
+  
+  NegCountriesInc <- region %>% 
+    na.omit() %>% 
+    filter(SigRelation == TRUE,NegSigRelation  == TRUE, PosSigRelation == FALSE,Increasing == TRUE) %>%
+    select(country_code,short_name,region) %>% anti_join(interestCountriesFromRegion,by = c("country_code" = "country_code"))
+  
+  NegCountriesDec <- region %>% 
+    na.omit() %>% 
+    filter(SigRelation == TRUE,NegSigRelation  == TRUE, PosSigRelation == FALSE,Increasing == FALSE) %>%
+    select(country_code,short_name,region) %>% 
+    anti_join(interestCountriesFromRegion,by = c("country_code" = "country_code"))
+    
   
   NoneCountries <- region %>% 
     na.omit() %>% 
     filter(SigRelation == FALSE) %>%
     select(country_code,short_name,region)
   
-  fixedRegion <- fixedRegion %>% mutate(NumNeg = NumNeg - nrow(interestCountriesFromRegion)) %>%
-    mutate(NumPos = NumPos - nrow(interestCountriesFromRegion)) %>%
+  
+  fixedRegion <- fixedRegion %>% 
+    mutate(NumNegInc = nrow(NegCountriesInc)) %>%
+    mutate(NumNegDec = nrow(NegCountriesDec)) %>%
+    mutate(NumPosInc = nrow(PosCountriesInc)) %>%
+    mutate(NumPosDec = nrow(PosCountriesDec)) %>%
     mutate(notEnoughInfo = nrow(NotEnoughInfoCountries)) %>%
     mutate(both = nrow(interestCountriesFromRegion))
   fixedRegion <- fixedRegion %>% pivot_longer(cols = colnames(.),names_to = "Relationship",values_to = "value")
@@ -137,10 +174,16 @@ for(region in RegionalRelationships)
     ) + 
     scale_y_discrete(limits = seq(from = 0,to = max(fixedRegion$value), by = 5))
   RegionalPlots[[length(RegionalPlots) + 1]] <- regionPlot
-  WorldCountryPos[[length(WorldCountryPos) + 1]] <- PosCountries
-  WorldCountryNeg[[length(WorldCountryNeg) + 1]] <- NegCountries
+  
+  WorldCountryPosInc[[length(WorldCountryPosInc) + 1]] <- PosCountriesInc
+  WorldCountryPosDec[[length(WorldCountryPosDec) + 1]] <- PosCountriesDec
+  
+  WorldCountryNegInc[[length(WorldCountryNegInc) + 1]] <- NegCountriesInc
+  WorldCountryNegDec[[length(WorldCountryNegDec) + 1]] <- NegCountriesDec
+  
   WorldNotEnoughInfo[[length(WorldNotEnoughInfo) + 1]] <- NotEnoughInfoCountries
   WorldInteresting[[length(WorldInteresting) + 1]] <- interestCountriesFromRegion
+  
   WorldCountryNone[[length(WorldCountryNone) + 1]] <-  NoneCountries
   WorldRelation[[length(WorldRelation) + 1]] <- fixedRegion
 }
@@ -151,10 +194,15 @@ WorldRelation <- WorldRelation %>% bind_rows() %>%
 
 WorldNotEnoughInfo <- WorldNotEnoughInfo %>% bind_rows() %>% mutate(RelationshipCategory = "No Info")
 WorldInteresting <-WorldInteresting %>% bind_rows() %>% mutate(RelationshipCategory = "Both")
-WorldCountryNeg <- WorldCountryNeg %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative")
-WorldCountryPos<-WorldCountryPos %>% bind_rows() %>% mutate(RelationshipCategory = "Positive")
+
+WorldCountryNegInc <- WorldCountryNegInc %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative Increasing")
+WorldCountryNegDec <- WorldCountryNegDec %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative Decreasing")
+
+WorldCountryPosInc<-WorldCountryPosInc %>% bind_rows() %>% mutate(RelationshipCategory = "Positive Increasing")
+WorldCountryPosDec<-WorldCountryPosDec %>% bind_rows() %>% mutate(RelationshipCategory = "Positive Decreasing")
+
 WorldCountryNone <- WorldCountryNone %>% bind_rows()  %>% mutate(RelationshipCategory = "None")
-WorldInfo <- bind_rows(WorldNotEnoughInfo,WorldInteresting,WorldCountryNeg,WorldCountryPos,WorldCountryNone)
+WorldInfo <- bind_rows(WorldNotEnoughInfo,WorldInteresting,WorldCountryNegInc,WorldCountryNegDec,WorldCountryPosInc,WorldCountryPosDec,WorldCountryNone)
 WorldRelationPlot <-WorldRelation %>% 
   ggplot(aes(x = Relation, y = value, colour = Relation, fill = Relation)) +
   geom_bar(stat = "identity") + 
@@ -173,12 +221,16 @@ GetCategory <- function(CountryName)
   if(nrow(category) == 0){category = "No Info"}
   else if(nrow(category) == 1){category = category[[1]]}
   else{
-    Negatives = paste0("Mauri|","Austria|","Guin|","Niger|","United States|","Mala|","The|","United A|","Turk|","South Afr|","New Z|","Slove")
-    NoInfo = paste0("North|","Dem. Rep. Korea|","Dominican Republic|","French|","South S|","New C|","Green")
-    Pos = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
+    NegativeInc = paste0("Dominican Reblic|","Mauri|","Austria|","Guin|","Niger|","United States|","Mala|","The|","United A|","Turk|","South Afr|","New Z|","Slove")
+    #PosInc = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
+    PosDec = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
+    
+    NoInfo = paste0("North|","Dem. Rep. Korea|","French|","South S|","New C|","Green|","Dominica")
+    
     both = paste0("Australia|","Greece")
-    if(str_detect(CountryName,Negatives)){category = "Negative"}
-    else if(str_detect(CountryName,Pos)){category = "Positive"}
+    if(str_detect(CountryName,NegativeInc)){category = "Negative Increasing"}
+    #else if(str_detect(CountryName,PosInc)){category = "Positive Increasing"}
+    else if(str_detect(CountryName,PosDec)){category = "Positive Decreasing"}
     else if(str_detect(CountryName,NoInfo)){category = "No Info"}
     else if(str_detect(CountryName,both)){category = "both"}
     else{category = "WTF"}
