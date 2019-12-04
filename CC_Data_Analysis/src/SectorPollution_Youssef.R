@@ -116,14 +116,41 @@ plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Gr
   print("-------------- DIFFF FOR Emissions ------------------")
   print(country_Emission_diff)
   
+  
   col_name <- paste("Country Growth TimeSeries With Difference ",country_Growth_diff) # I want to put difference as col name so its  in plot title
-  bound_ts <- cbind("Country Growth TimeSeries With Difference " = country_Growth_TimeSeries, 
+  bound_ts <- cbind("Country Growth TimeSeries With Difference "  = country_Growth_TimeSeries, 
                     "Country Emission TimeSeries With Difference " = country_Emission_TimeSeries)
   p <- autoplot(bound_ts, facets=TRUE) +
     xlab("Year") + ylab("") +
     ggtitle(paste("Country Growth vs Emission for ", country_name))
   
-  return(p)
+  ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+  
+  return(ccf2)
+}
+
+# Plots TimeSeries W/O differencing 
+plot_raw_ts <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+  country_growth_em <- em_growth_df %>% 
+    filter(activity == activity_ss) %>% 
+    filter(country == country_name)
+  
+  min_year <- min(country_growth_em$year)
+  print(min_year)
+  
+  country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) 
+  
+  country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year)
+  
+  
+  bound_ts <- cbind("Country Growth TimeSeries"  = country_Growth_TimeSeries, 
+                    "Country Emission TimeSeries" = country_Emission_TimeSeries)
+  p <- autoplot(bound_ts, facets=TRUE) +
+    xlab("Year") + ylab("") +
+    ggtitle(paste("Country Growth vs Emission for ", country_name))
+  
+  
+  return(p) 
 }
 
 # Find Cross Correlation
@@ -327,13 +354,13 @@ int_growth_added_df %>%
     )
   ) +
   geom_line() +
-  geom_smooth(se = FALSE, method = lm) +
+  geom_smooth(se = FALSE, method = lm, size = 0.5) +
   facet_grid(rows = vars(activity)) +
   labs(
     x = "Year",
-    y = "Growth Added",
+    y = "Average Growth Added (% of Total Growth)",
     colour = 'Activity Category',
-    title = "Economical Growth Added vs Year"
+    title = "International Economical Growth Added vs Year"
   )
 
 # Per Average Value added DF(global value added per year)
@@ -355,6 +382,12 @@ em_env_tax_merged_df <- dplyr::left_join(total_country_ghg_emissions, env_tot_ta
 
 # CCF ANALYSIS FOR COUNTRY EMISSION VS ENV TAX ----------------------------
 
+# Time series plot for visualization
+
+plot_raw_ts(em_tot_growth_merged_df, "United Kingdom")
+plot_time_series(em_tot_growth_merged_df, "United States")
+
+
 # We're especially concerned about the lag in this case
 countries_em_tax <- unique(em_env_tax_merged_df$country)
 countries_em_tax_ccf_res <- tribble()
@@ -364,6 +397,9 @@ for (country in countries_em_tax) {
   countries_em_tax_ccf_res <- bind_rows(countries_em_tax_ccf_res, ccf_res)
 }
 
+
+# notice how points tend to be left of 0 indicating that 
+# movement in total env tax revenue in time t-x has an effect on emission in time t
 countries_em_tax_ccf_res %>%
   ggplot(
     aes(
@@ -378,6 +414,20 @@ countries_em_tax_ccf_res %>%
     y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
     title = "Significant Cross Correlation Between Environmental Tax and Total Emissions Time Series"
+  )
+
+countries_em_tax_ccf_res %>% 
+  ggplot(
+    aes(
+      x = (LAG)
+    )
+  ) +
+  geom_histogram() +
+  labs(
+    x = "LAG (Delay between correlation)",
+    # y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Lag Distribution Between Environmental Tax and Total Emissions Time Series"
   )
 
 
@@ -410,12 +460,72 @@ countries_gr_em_ccf_res %>%
   )
 # ggrepel::geom_text_repel()
 
+countries_gr_em_ccf_res %>% 
+  ggplot(
+    aes(
+      x = (LAG)
+    )
+  ) +
+  geom_histogram() +
+  labs(
+    x = "LAG (Delay between auto-correlation)",
+    # y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Lag Distribution Between Country Growth and Total Emissions Time Series"
+  )
+
+countries_gr_em_ccf_res %>% filter(LAG > 0) %>% 
+  ggplot(
+    aes(
+      x = (ACF)
+    )
+  ) +
+  geom_density() +
+  labs(
+    x = "ACF (Auto-Correlation between Time Series)",
+    # y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation ACF Distribution Between Country Growth and Total Emissions Time Series "
+  )
+
+
 # Top Significantly Auto-Correlated Country (ITS SOUTH KOREA)
-top_xcorr_country <- countries_ccf_res[order(-countries_ccf_res$ACF),] %>% head(1) %>% select(country)
-print(top_xcorr_country)
+top_xcorr_countries <- countries_gr_em_ccf_res[order(-countries_gr_em_ccf_res$ACF),] %>% head(3)
 
 # LETS LOOK AT ITS CROSS CORRELATION INDIVIDUALLY
-countries_ccf_res %>% filter(country == "South Korea") %>%
+top_xcorr_countries %>%
+  ggplot(
+    aes(
+      x = (LAG),
+      y = (ACF),
+      color = country
+    )
+  ) +
+  geom_point(size = 3) +
+  labs(
+    x = "LAG (Delay between correlation)",
+    y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Between Total Growth and Total Emissions Time Series"
+  )
+
+countries_gr_em_ccf_res %>% filter(country == "United States") %>%
+  ggplot(
+    aes(
+      x = (LAG),
+      y = (ACF),
+      color = country
+    )
+  ) +
+  geom_point(size = 3) +
+  labs(
+    x = "LAG (Delay between correlation)",
+    y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Between Total Growth and Total Emissions Time Series"
+  )
+
+countries_gr_em_ccf_res %>% filter(country == "Brazil") %>%
   ggplot(
     aes(
       x = (LAG),
