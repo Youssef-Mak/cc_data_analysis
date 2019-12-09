@@ -20,35 +20,29 @@ library(ggthemes)
 
 # Datasets ----------------------------------------------------------------
 
-country_emissions_filename <- "data/raw/CAIT-Country-GHG-Emissions.csv"
+country_emissions_filename <- "../data/raw/CAIT-Country-GHG-Emissions.csv"
 
-activity_value_filename <- "data/raw/value_added_per_act.csv"
+activity_value_filename <- "../data/raw/value_added_per_act.csv"
 
-regulation_filename <- "data/raw/law_search/data.csv"
+regulation_filename <- "../data/raw/law_search/data.csv"
 
-emission_tax_filename <- "data/raw/emission_tax.csv"
+emission_tax_filename <- "../data/raw/emission_tax.csv"
 
-empl_per_act_filename <- "data/raw/employment_per_act.csv"
+empl_per_act_filename <- "../data/raw/employment_per_act.csv"
 
-co2_per_sect <- "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
+co2_per_sect <- "../data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
 
-meth_per_sect <- "data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
+meth_per_sect <- "../data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
 
-no2_per_sect <- "data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.csv"
+no2_per_sect <- "../data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.csv"
 
-gge_per_sect <- "data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"
+gge_per_sect <- "../data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"
 
 
 # FUNCTION DEFINITIONS ---------------------------------------------------------------
 
 # Find minimal distance of acf between two bounds
 findSignificance <- function(acf, upper_bound, lower_bound) {
-  print("ACF")
-  print(acf)
-  print("Upp bound")
-  print(upper_bound)
-  print("Lower bound")
-  print(lower_bound)
   if ( acf >= upper_bound) {
     return(acf - upper_bound)
   } else if (acf <= lower_bound) {
@@ -66,11 +60,8 @@ stationarize <- function(time_series) {
   adf_test <- time_series %>% adf.test()
   adf_p <- adf_test$p.value
   diff <- 0
-  print("P value")
-  print(adf_p)
   # Low p-value indicating stationary
   while ((!is.na(adf_p)) & (adf_p > 0.05)) {
-    print("--------------------------- IN adf LOOP --------------------------- ")
     time_series <- time_series %>% diff()
     diff <- diff + 1 
     adf_test <- time_series %>% adf.test()
@@ -79,18 +70,14 @@ stationarize <- function(time_series) {
   
   kpss_test <- time_series %>% kpss.test()
   kpss_p <- kpss_test$p.value
-  print("P value")
-  print(kpss_p)
   # High p-value indicating non-trend-stationary
   while ((!is.na(kpss_p)) & kpss_p < 0.05) {
-    print("--------------------------- IN kpss LOOP --------------------------- ")
     time_series <- time_series %>% diff()
     diff <- diff + 1
     kpss_test <- time_series %>% kpss.test()
     kpss_p <- kpss_test$p.value
   }
   
-  print("Done stationarizing")
   return(list(ts = time_series, diff = diff))
 }
 
@@ -102,19 +89,14 @@ plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Gr
     filter(country == country_name)
   
   min_year <- min(country_growth_em$year)
-  print(min_year)
   
   country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
   country_Growth_TimeSeries <- country_growth_ts_obj$ts
   country_Growth_diff <- country_growth_ts_obj$diff
-  print("-------------- DIFFF FOR GROWTH ------------------")
-  print(country_Growth_diff)
   
   country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
   country_Emission_TimeSeries <- country_Emission_ts_obj$ts
   country_Emission_diff <- country_Emission_ts_obj$diff
-  print("-------------- DIFFF FOR Emissions ------------------")
-  print(country_Emission_diff)
   
   
   col_name <- paste("Country Growth TimeSeries With Difference ",country_Growth_diff) # I want to put difference as col name so its  in plot title
@@ -136,7 +118,6 @@ plot_raw_ts <- function(em_growth_df, country_name, activity_ss = "Total Growth"
     filter(country == country_name)
   
   min_year <- min(country_growth_em$year)
-  print(min_year)
   
   country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) 
   
@@ -165,26 +146,17 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   }
   
   min_year <- min(country_growth_em$year)
-  print(min_year)
   
-  print("Making Time series")
   country_growth_ts_obj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
-  print("Made ts Call")
   country_Growth_TimeSeries <- country_growth_ts_obj$ts
   country_Growth_diff <- country_growth_ts_obj$diff
-  print(country_Growth_TimeSeries)
   
   country_Emission_ts_obj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
-  print("Made ts Calls")
   country_Emission_TimeSeries <- country_Emission_ts_obj$ts
   country_Emission_diff <- country_Emission_ts_obj$diff
-  print(country_Emission_TimeSeries)
-  print("Done Making Time Series")
   
-  print("making ccf")
   # Movement in x(Growth) May have an effect on y(emission)
   ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
-  print("Done making ccf")
   
   diff_length <- sqrt((country_Growth_diff^2) + (country_Emission_diff^2))
   
@@ -192,7 +164,6 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   crit_val_lb <- (-2 / sqrt(ccf2$n.used))
   crit_val_ub <- (2 / sqrt(ccf2$n.used))
   
-  print("making xcorr")
   xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% 
     mutate(country = country_name) %>%
     mutate(activity = activity_ss) %>% 
@@ -200,7 +171,6 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
     mutate(dist = sapply(ACF, findSignificance, upper_bound = crit_val_ub, lower_bound = crit_val_lb)) %>% 
     filter(ACF >= crit_val_ub | ACF <= crit_val_lb)
   
-  print("Done making xcorr")
   return(xcorrDF)
   
 }
@@ -221,7 +191,6 @@ empl_per_act_df <- processCsvData(empl_per_act_filename) %>%
   dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
 
 # Country Emission DF (mtCO2)
-# TODO : Add sector emission columns  
 total_country_ghg_emissions <- read_csv(country_emissions_filename, skip=2) %>% 
   clean_names() %>% 
   select(country, year, total_ghg_emissions_mtco2e = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
@@ -230,9 +199,6 @@ detail_country_ghg_emission <- read_csv(country_emissions_filename, skip=2) %>%
   clean_names() %>% 
   mutate(total_ghg_emissions_mtco2e = total_ghg_emissions_including_land_use_change_and_forestry_mt_co_e) %>% 
   na.omit()
-
-# Regulation per country DF
-reg_df <- processCsvData(regulation_filename)
 
 # Environmental tax per country DF
 env_tax_df <- processCsvData(emission_tax_filename) %>% 
@@ -392,7 +358,6 @@ plot_time_series(em_tot_growth_merged_df, "United States")
 countries_em_tax <- unique(em_env_tax_merged_df$country)
 countries_em_tax_ccf_res <- tribble()
 for (country in countries_em_tax) {
-  print(country)
   ccf_res <- findTotalCrossCorr(em_env_tax_merged_df, country, "Total Environmental Tax Generated")
   countries_em_tax_ccf_res <- bind_rows(countries_em_tax_ccf_res, ccf_res)
 }
@@ -438,7 +403,6 @@ countries_em_tax_ccf_res %>%
 countries_gr_em_ccf_res <- tribble()
 for (i in 1:nrow(countries_of_interest)) {
   country <- countries_of_interest[i,]$country
-  print(country)
   ccf_res <- findTotalCrossCorr(em_tot_growth_merged_df, country)
   countries_gr_em_ccf_res <- bind_rows(countries_gr_em_ccf_res, ccf_res)
 }
@@ -458,7 +422,6 @@ countries_gr_em_ccf_res %>%
     colour = 'Country',
     title = "Significant Cross Correlation Between Total Growth and Total Emissions Time Series"
   )
-# ggrepel::geom_text_repel()
 
 countries_gr_em_ccf_res %>% 
   ggplot(
@@ -469,12 +432,11 @@ countries_gr_em_ccf_res %>%
   geom_histogram() +
   labs(
     x = "LAG (Delay between auto-correlation)",
-    # y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
     title = "Significant Cross Correlation Lag Distribution Between Country Growth and Total Emissions Time Series"
   )
 
-countries_gr_em_ccf_res %>% filter(LAG > 0) %>% 
+countries_gr_em_ccf_res %>% filter(LAG == 0) %>% 
   ggplot(
     aes(
       x = (ACF)
@@ -483,7 +445,6 @@ countries_gr_em_ccf_res %>% filter(LAG > 0) %>%
   geom_density() +
   labs(
     x = "ACF (Auto-Correlation between Time Series)",
-    # y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
     title = "Significant Cross Correlation ACF Distribution Between Country Growth and Total Emissions Time Series "
   )
@@ -542,12 +503,12 @@ countries_gr_em_ccf_res %>% filter(country == "Brazil") %>%
   )
 
 # LETS LOOK AT ITS TIME SERIES(SO SIMILAR WOW)
-plot_time_series(em_tot_growth_merged_df, top_xcorr_country[1,]$country)
+plot_time_series(em_tot_growth_merged_df, top_xcorr_countries[1,]$country)
 
 # LETS LOOK AT ITS SUB SECTOR GROWTH PER YEAR
 
 coun_growth_add_df %>%
-  filter(location == top_xcorr_country[1,]$country) %>% 
+  filter(location == top_xcorr_countries[1,]$country) %>% 
   ggplot(
     aes(
       x = (year),
@@ -565,7 +526,6 @@ coun_growth_add_df %>%
     title = "Economical Growth Added vs Year"
   )
 
-# LETS GO THROUGH EACH SUBSECTOR AND FIND CROSS CORRELATIONS WITH EMMISIONS
 
 south_kor_df <- em_growth_ss_merged_df %>% 
   filter(country == "South Korea") %>% 
@@ -573,11 +533,9 @@ south_kor_df <- em_growth_ss_merged_df %>%
 
 # lets get all the subsectors
 sub_sectors <- unique(south_kor_df$activity)
-print(sub_sectors)
 
 sk_ss_ccf_res <- tribble()
 for (ss in sub_sectors) {
-  print(ss)
   ccf_res <- findTotalCrossCorr(south_kor_df, "South Korea", ss)
   sk_ss_ccf_res <- bind_rows(sk_ss_ccf_res, ccf_res)
 }
@@ -599,139 +557,6 @@ sk_ss_ccf_res %>%
     title = "Significant Cross Correlation Between Subsector Growth and Total Emissions Time Series for South Korea"
   )
 
-
-
-
-
-aus_growth_em <- em_growth_ss_merged_df %>% filter(activity == "Agriculture and Fishery") %>% filter(country == "Australia")
-
-# First let's assume that Value added and environmental tax are independent to one another
-# to perform Pearson corelation test
-# We also assume there is a linear relationship between the two
-
-# Assume That both variables are continuous and linearly related (appears linear barring outliers)
-plot(aus_growth_em$value, aus_growth_em$agriculture_mt_co2e)
-
-# Assume variables follow a bivariate normal distribution
-qqnorm(aus_growth_em$value)
-qqline(aus_growth_em$value)
-
-qqnorm(aus_growth_em$agriculture_mt_co2e)
-qqline(aus_growth_em$agriculture_mt_co2e)
-
-# Assume variances are homogeneous (no cone shape scatter plot)
-
-# No Major outliers (check scatter plot)
-
-# Correlation test
-cor.test(aus_growth_em$value, aus_growth_em$agriculture_mt_co2e, method = "pearson", data=aus_val_tax)
-
-# Output -> Non Significant negative corelation
-
-# Let's plot two time series 
-
-# one for Added growth wrt years
-Agriculture_Growth_TimeSeries <- ts(aus_growth_em$value, start = 1996)
-Agriculture_Emission_TimeSeries <- ts(aus_growth_em$agriculture_mt_co2e, start = 1996)
-bound_ts <- cbind( Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries)
-autoplot(bound_ts, facets=TRUE) +
-  xlab("Year") + ylab("Hello") +
-  ggtitle(paste("Time Series for Australian Agricultural Subsector", 5))
-
-scatter_ts_plot <-
-  qplot(Agriculture_Growth_TimeSeries, Agriculture_Emission_TimeSeries, data=as.data.frame(bound_ts)) +
-  ylab("Emission (mtCO2)") + xlab("Added Growth")
-
-# Cross corelation testing for time series
-
-# First test for stationarity (the way the time series changes does not change over time)
-
-adf.test(Agriculture_Growth_TimeSeries) # Low p-value indicating stationary
-
-kpss.test(Agriculture_Growth_TimeSeries) # High p-value indicating non-trend-stationary
-
-adf.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-stationary
-
-kpss_t <- kpss.test(Agriculture_Emission_TimeSeries) # High p-value indicating non-trend-stationary
-
-diff_agr_grwt_ts <- diff(Agriculture_Growth_TimeSeries)
-
-diff_agr_em_ts <- diff(Agriculture_Emission_TimeSeries)
-
-# Re-test for Stationarity
-
-diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
-
-diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
-
-diff_agr_grwt_ts <- diff_agr_grwt_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() 
-
-# growth IS Trend-Stationary
-
-diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% adf.test() # Low p-value indicating stationary
-
-diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff() %>% kpss.test() # High p-value indicating non-trend-stationary
-
-diff_agr_em_ts <- diff_agr_em_ts %>% diff() %>% diff() %>% diff() %>% diff() %>% diff()
-
-# Emission is growth stationary
-
-# Cross correlation
-
-ccf2 <- ccf(diff_agr_grwt_ts, diff_agr_em_ts)
-
-lb <- (-2 / sqrt(ccf2$n.used))
-
-up <- (2/ sqrt(ccf2$n.used))
-
-data.frame(ACF = ccf2$acf, LAG = ccf2$lag)
-
-xcorrDF <- data.frame(ACF = ccf2$acf, LAG = ccf2$lag) %>% filter(ACF >= up | ACF <= lb)
-
-
-print(ccf2$acf)
-# Negatively correlated in -2 lag
-# Positively correlated in -1 and -3 lag
-# Not sure if i took differencing into account TODO: apply ARIMA MOde
-
-
-
-# Australia value added per year for Agriculture Sector
-# aus_val_tax %>%
-#   ggplot(
-#     aes(
-#       x = (year),
-#       y = (value),
-#       color = activity
-#     )
-#   ) +
-#   geom_point(size = 2) +
-#   geom_smooth(se = FALSE, method = lm) +
-#   facet_grid(rows = vars(activity)) +
-#   labs(
-#     x = "Year",
-#     y = "Value Added",
-#     colour = 'Activity Category',
-#     title = "Economical Value Added vs Year In Australia"
-#   )
-# 
-# aus_val_tax %>% 
-#   ggplot(
-#     aes(
-#       x = (year),
-#       y = (total_env_tax),
-#       color = activity
-#     )
-#   ) +
-#   geom_point(size = 2) +
-#   geom_smooth(se = FALSE, method = lm) +
-#   facet_grid(rows = vars(activity)) +
-#   labs(
-#     x = "Year",
-#     y = "Environment Tax Income",
-#     colour = 'Activity Category',
-#     title = "Environment Tax Income vs Year In Australia"
-#   )
 
 
 
