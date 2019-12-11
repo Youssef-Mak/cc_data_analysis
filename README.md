@@ -30,13 +30,17 @@ Exploratory data analysis pertaining to the affect of climate change regulations
   ### Per Sector Emission 
   - Source: "United Nations FAO"
   - URL : https://ourworldindata.org/co2-and-other-greenhouse-gas-emissions#emissions-by-sector
-  #### CO2 per sector
-  - Project Path : "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
-  #### Methane per sector
-  - Project Path : "data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
-  #### Nitrous Oxide per sector
-  - Project Path : "data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.csv"
-  #### Greenhouse gas emission per sector
-  - Project Path : "data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"
-
+      #### CO2 per sector
+      - Project Path : "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
+      #### Methane per sector
+      - Project Path : "data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
+      #### Nitrous Oxide per sector
+      - Project Path : "data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.csv"
+      #### Greenhouse gas emission per sector
+      - Project Path : "data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"  
+  ### Human Development Index 
+  - Project Path : "data/raw/hdi_per_country.csv"
+  - URL : http://hdr.undp.org/en/data#
+  
+  
 - https://www.kaggle.com/unitednations/international-greenhouse-gas-emissions
