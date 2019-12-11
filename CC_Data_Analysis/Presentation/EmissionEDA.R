@@ -260,15 +260,15 @@ env_subject_mappings <- tribble(
 env_tax_df <- env_tax_df %>% mutate(activity = mapvalues(activity, env_subject_mappings$code, env_subject_mappings$name))
 
 
-# empl_subject_mappings <- tribble(
-#   ~code, ~name,
-#   "AGR", "Agriculture",
-#   "CONSTR", "Construction",
-#   "INDUSCONSTR", "Industry Including Construction",
-#   "MFG", "Manufacturing",
-#   "SERV", "Services"
-# )
-# empl_per_act_df <- empl_per_act_df %>% mutate(activity = mapvalues(activity, empl_subject_mappings$code, empl_subject_mappings$name))
+empl_subject_mappings <- tribble(
+  ~code, ~name,
+  "AGR", "Agriculture",
+  "CONSTR", "Construction",
+  "INDUSCONSTR", "Industry Including Construction",
+  "MFG", "Manufacturing",
+  "SERV", "Services"
+)
+empl_per_act_df <- empl_per_act_df %>% mutate(activity = mapvalues(activity, empl_subject_mappings$code, empl_subject_mappings$name))
 
 country_mappings <-
   tribble(
