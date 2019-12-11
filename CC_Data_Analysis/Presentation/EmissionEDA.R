@@ -82,7 +82,7 @@ stationarize <- function(time_series) {
 }
 
 # Plots Time Series
-plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+plot_ccf <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
   
   country_growth_em <- em_growth_df %>% 
     filter(activity == activity_ss) %>% 
@@ -111,18 +111,23 @@ plot_time_series <- function(em_growth_df, country_name, activity_ss = "Total Gr
   return(ccf2)
 }
 
-# Plots TimeSeries W/O differencing 
-plot_raw_ts <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+plot_ts <- function(em_growth_df, country_name, activity_ss = "Total Growth", diff = TRUE) {
   country_growth_em <- em_growth_df %>% 
     filter(activity == activity_ss) %>% 
     filter(country == country_name)
   
   min_year <- min(country_growth_em$year)
   
-  country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) 
-  
-  country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year)
-  
+  if (diff){
+    country_Growth_TimeSeriesObj <- ts(country_growth_em$value, start = min_year) %>% stationarize()
+    country_Growth_TimeSeries <- country_Growth_TimeSeriesObj$ts
+    
+    country_Emission_TimeSeriesObj <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year) %>% stationarize()
+    country_Emission_TimeSeries <- country_Emission_TimeSeriesObj$ts
+  } else {
+    country_Growth_TimeSeries <- ts(country_growth_em$value, start = min_year) 
+    country_Emission_TimeSeries <- ts(country_growth_em$total_ghg_emissions_mtco2e, start = min_year)
+  }
   
   bound_ts <- cbind("Country Growth TimeSeries"  = country_Growth_TimeSeries, 
                     "Country Emission TimeSeries" = country_Emission_TimeSeries)
@@ -133,9 +138,8 @@ plot_raw_ts <- function(em_growth_df, country_name, activity_ss = "Total Growth"
   
   return(p) 
 }
-
 # Find Cross Correlation
-findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total Growth") {
+findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total Growth", rev = FALSE) {
   
   country_growth_em <- em_growth_df %>% 
     filter(activity == activity_ss) %>% 
@@ -155,8 +159,13 @@ findTotalCrossCorr <- function(em_growth_df, country_name, activity_ss = "Total 
   country_Emission_TimeSeries <- country_Emission_ts_obj$ts
   country_Emission_diff <- country_Emission_ts_obj$diff
   
-  # Movement in x(Growth) May have an effect on y(emission)
-  ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+  if (rev) {
+    # Movement in x(emissions) May have an effect on y(growth)
+    ccf2 <- ccf(country_Emission_TimeSeries, country_Growth_TimeSeries)
+  } else {
+    # Movement in x(Growth) May have an effect on y(emission)
+    ccf2 <- ccf(country_Growth_TimeSeries, country_Emission_TimeSeries)
+  }
   
   diff_length <- sqrt((country_Growth_diff^2) + (country_Emission_diff^2))
   
@@ -186,9 +195,9 @@ processCsvData <- function(csv_filename) {
 # Reading Datasets --------------------------------------------------------
 
 # Employment per activity filename
-empl_per_act_df <- processCsvData(empl_per_act_filename) %>% 
-  dplyr::rename(activity = subject) %>% 
-  dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
+# empl_per_act_df <- processCsvData(empl_per_act_filename) %>% 
+#   dplyr::rename(activity = subject) %>% 
+#   dplyr::mutate(location = countrycode::countrycode(location, 'iso3c', 'country.name.en'))
 
 # Country Emission DF (mtCO2)
 total_country_ghg_emissions <- read_csv(country_emissions_filename, skip=2) %>% 
@@ -251,15 +260,15 @@ env_subject_mappings <- tribble(
 env_tax_df <- env_tax_df %>% mutate(activity = mapvalues(activity, env_subject_mappings$code, env_subject_mappings$name))
 
 
-empl_subject_mappings <- tribble(
-  ~code, ~name,
-  "AGR", "Agriculture",
-  "CONSTR", "Construction",
-  "INDUSCONSTR", "Industry Including Construction",
-  "MFG", "Manufacturing",
-  "SERV", "Services"
-)
-empl_per_act_df <- empl_per_act_df %>% mutate(activity = mapvalues(activity, empl_subject_mappings$code, empl_subject_mappings$name))
+# empl_subject_mappings <- tribble(
+#   ~code, ~name,
+#   "AGR", "Agriculture",
+#   "CONSTR", "Construction",
+#   "INDUSCONSTR", "Industry Including Construction",
+#   "MFG", "Manufacturing",
+#   "SERV", "Services"
+# )
+# empl_per_act_df <- empl_per_act_df %>% mutate(activity = mapvalues(activity, empl_subject_mappings$code, empl_subject_mappings$name))
 
 country_mappings <-
   tribble(
@@ -350,9 +359,6 @@ em_env_tax_merged_df <- dplyr::left_join(total_country_ghg_emissions, env_tot_ta
 
 # Time series plot for visualization
 
-plot_raw_ts(em_tot_growth_merged_df, "United Kingdom")
-plot_time_series(em_tot_growth_merged_df, "United States")
-
 
 # We're especially concerned about the lag in this case
 countries_em_tax <- unique(em_env_tax_merged_df$country)
@@ -403,7 +409,7 @@ countries_em_tax_ccf_res %>%
 countries_gr_em_ccf_res <- tribble()
 for (i in 1:nrow(countries_of_interest)) {
   country <- countries_of_interest[i,]$country
-  ccf_res <- findTotalCrossCorr(em_tot_growth_merged_df, country)
+  ccf_res <- findTotalCrossCorr(em_tot_growth_merged_df, country, rev = TRUE)
   countries_gr_em_ccf_res <- bind_rows(countries_gr_em_ccf_res, ccf_res)
 }
 
@@ -503,7 +509,7 @@ countries_gr_em_ccf_res %>% filter(country == "Brazil") %>%
   )
 
 # LETS LOOK AT ITS TIME SERIES(SO SIMILAR WOW)
-plot_time_series(em_tot_growth_merged_df, top_xcorr_countries[1,]$country)
+plot_ts(em_tot_growth_merged_df, top_xcorr_countries[1,]$country, diff=TRUE)
 
 # LETS LOOK AT ITS SUB SECTOR GROWTH PER YEAR
 

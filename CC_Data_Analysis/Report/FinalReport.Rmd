@@ -1,0 +1,225 @@
+---
+title: "Impact of Regulations and Emissions"
+subtitle: 'Exploratory data analysis'
+author: "Quang-Vinh Do, Shaafici Ali, Thinh Hong, Youssef Makboul"
+date: " `r Sys.Date()` "
+output:
+  html_document:
+    theme: spacelab
+    code_folding: hide
+    toc: True
+    toc_float: True
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+
+# Set some options
+knitr::opts_chunk$set(echo = FALSE, fig.height = 8, fig.width = 17)
+skimr::skim_with(numeric = list(hist = NULL))
+
+# Source Script File 
+source('EmissionEDA.R')
+
+# load libraries
+library(countrycode)
+library(ggrepel)
+library(fable)
+library(feasts)
+library(forecast)
+library(ggthemes)
+library(janitor)
+library(lmtest)
+library(lubridate)
+library(plotly)
+library(plyr)
+library(skimr)
+library(tidyverse)
+library(tsibble)
+library(viridis)
+library(maps)
+library(purrr)
+```
+
+# Introduction and Objectives
+
+The event of climate change has been a frequently discussed topic especially as of late. Although a considerable amount of people deny the magnitude of the event, there is an increased fear of the general repercussions of global warming. This fear has lead to a significant public pressure being applied to governments around the world demanding increased regulations in order to help prevent climate change. This has been especially the case in late 2019 where protestors in increasing numbers demonstrated to spread awareness as well as encourage a greater response from legislators. In addtion, the protestors also criticize the adherence to international protocols, thereby questioning the effect of global treaties on governement greenhouse gas(GHG) emission legislation.   
+
+There are several possible reasons explaining the government reluctance. It may be the case that there is a negative economic impact in the imposing of strict emission regulation as emission could be related to economy growth. It could also be the case that governments have been imposing regulations as a result of international accords. In addition, it is possible that regulations are simply not effective enough to invoke a reduction in emissions.  
+
+In this report, we will attempt to gain insight on the reasons causing government reluctancy as well as the global effect of protocol. This involves the following objectives :
+
+* Identify relationship between total GHG emissions and total economic growth 
+<!-- * Identify relationship between environmental tax revenue and total GHG emissions -->
+* Analyze the effect of international protocols on government emission legislation 
+* Identify relationship of total emission and particulate damage
+
+
+# Emission Relationships
+
+Part of the objectives involve identifying and potentially quantifying a relationship between the total greenhouse gas emissions and different variables. These variables include the environmental tax revenue as well as the total economic growth. It is important to note that the goal is not to identify a cause or effect but rather discover a common relationship between the variables for a number of countries. 
+
+## Definition of Variables
+
+### Total Growth
+
+The total growth of an economy was measured by its annual growth rate. Moreover, the annual growth rate represents the percentage change in total growth of the country's GDP. In this context, "total" refers to the sum among all sectors. The dataset used for this was sourced from the Organisation for Economic Co-operation and Development(OECD) which provided the total growth per subsector(activity) for a given country per year.[1]
+
+
+### Total Emissions
+
+The total emissions for a given country was measured by the sum of all of its greenhouse gas emissions for a given year. This includes the sum of the emissions of six gases classified as greenhouse gases. [2] The emission data was compiled over the course of over 20 years depending on the country.
+
+<!-- ### Environmental Tax Revenue -->
+
+<!-- The environmental tax revenue is expressed as the percentange of the given country's GDP. These tax revenues are generated from a variety of environmental domains. These domains include energy products, vehicle fuels, motor vehicles and transport services as well as other various other industries that are subject to an environmental tax. [3]  -->
+
+## Methodology
+ 
+In order to gain insight on the relationship, a time series analysis is especially relevant. For each country, a seperate time series for each of the respective variables was to be constructed. In every individual case, we wish to gain insight on whether one series' changes is related to the other. We then evaluate the cross-corelations of the two time series using a cross corelation test with 95% confidence bounds. 
+
+To conduct a cross-corelation test, time series must be stationarized meaning that the mean and variance of the time series remains constant over time. To stationarized a given time series, differencing is necessary in which the change in value from one point is computed with a subsequent point in the time series. The stationarity of the time series is then confirmed by a ADF test as well as a KPSS test to test for trend-stationarity. 
+
+
+```{r, warning=FALSE, echo=FALSE, fig.cap="\\label{fig:figs}Raw Time Series"}
+plot_ts(em_tot_growth_merged_df, "United States", diff=FALSE)
+```
+<!-- ![](../output/Plots/USRawTS.png) -->
+
+```{r, warning=FALSE, echo=FALSE, fig.cap="\\label{fig:figs}Differenced Time Series"}
+plot_ts(em_tot_growth_merged_df, "United States", diff=TRUE)
+```
+<!-- ![](../output/Plots/USDiffTS.png) -->
+
+
+This was accomplished by an automated procedure that would both stationarize ad hoc and compute the cross-corelations for two given-time series.
+
+<!-- ![](../output/Plots/XCorrUSPlot.png) -->
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+plot_ccf(em_tot_growth_merged_df, "United States")
+```
+
+This process was to be completed for each country in dataset that had sufficient year entries in order to construct the time series. In this case the cutoff was seven years as this would allow us to test for a reasonable amount of countries due to dataset limitations. The statistically significant(\alpha = 0.05) country cross-correlations are then plotted together onto an amalgameted ACF plot that can then be analyzed.
+
+## GHG Emissions and Economic Growth
+
+### Hypothesis
+It was hypothesized that there would be a positive relationship between emissions and total economy growth. In other words, a rise in green-house gas emissions would be corelated with a rise in economic growth. This is mainly because it is believed that emissions are generally associated with an increased industrial output and thus, intuitively, a rise in emissions would be followed by an increase in economic growth.
+
+This would ideally be demonstrated by the emission time series serving as a positive lagging indicator for the economic growth time series. This is where the effect of increase in the emission time series transfers to the economic growth time series several periods(years) later. 
+
+### Results
+
+The results were quite inconclusive but they did provide valuable insight. The resulting plot of cross-correlation was quite scattered with significant cross-correlations spread sparsely accross the LAG axis. This can be observed in the plot below which represents the significant cross-correlations between economic growth and total emissions. This thus refuted our hypothesis as we expected cross-correlations to clearly tend to a negative lag with a positive cross-correlation. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+countries_gr_em_ccf_res %>%
+  ggplot(
+    aes(
+      x = (LAG),
+      y = (ACF),
+      color = country
+    )
+  ) +
+  geom_point(size = 3) +
+  labs(
+    x = "LAG (Delay between correlation)",
+    y = "ACF (Auto-correlation between Time-Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Between Total Emissions and Total Growth Time Series"
+  )
+```
+<!-- ![](../output/Plots/XCorrCountryValEm.png) -->
+
+Interestingly, there appeared to be clusters in the 0, -1 and 1 lags. Notably, the largest cluster was located at the 0 lag and had a strongly postive auto-correlation. This would indicate that a rise in emissions is directly auto-correlated with an increase in economic growth in the same year. However, this cluster size is not significant enough to draw that conclusion.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+countries_gr_em_ccf_res %>% 
+  ggplot(
+    aes(
+      x = (LAG)
+    )
+  ) +
+  geom_histogram() +
+  labs(
+    x = "LAG (Delay between auto-correlation)",
+    colour = 'Country',
+    title = "Significant Cross Correlation Lag Distribution Between Total Emissions and Total Growth Time Series"
+  )
+```
+<!-- ![](../output/Plots/CounGrowthHist.png) -->
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+countries_lagz <- countries_gr_em_ccf_res %>% filter(LAG == 0) %>% select("country")
+countries_gr_em_ccf_res %>% filter(LAG == 0) %>% 
+  ggplot(
+    aes(
+      x = (ACF)
+    )
+  ) +
+  geom_density() +
+  labs(
+    x = "ACF (Auto-Correlation between Time Series)",
+    colour = 'Country',
+    title = "Significant Cross Correlation ACF Distribution Between Total Emissions and Total Growth Time Series "
+  )
+```
+<!-- ![](../output/Plots/DensityLag0.png) -->
+
+It was also difficult to draw a conclusion from the group of countries that were presented in this cluster. These countries included South Korea, Mexico, Netherlands, Slovakia, Turkey, United Kingdom, Slovenia, and the	United States. It is possible that there is a shared economic attribute between these countries but it is not obvious. 
+
+Thus, the insight gained is that there is no evident cross-correlation between the total emission and economic growth for *all* countries. It could be the case that a significant cross correlation exists for countries with a specific economic attribute. 
+
+### Flaws and Further Exploration
+
+A major flaw in our methodology is that the significance level was not adjusted for the number of tests being done for each individual country. This is especially the case for evaluating the significance of the cross-correlations. This may have perhaps lead to more conclusive results.
+
+A further analysis could have been to classify countries by development level and then evaluate their respective emission/growth cross-correlations. This could have added more insight in terms of meaning of the diffrent cross-correlation clusters at different lags.
+
+<!-- ## GHG Emissions and Environmental Tax Revenue  -->
+<!-- NOT SURE WHETHER TO INCLUDE THIS -->
+<!-- ### Hypothesis -->
+
+<!-- For the purpose of our analysis, it is inferred that this value can indicate either the violation of -->
+
+<!-- ### Results -->
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# notice how points tend to be left of 0 indicating that 
+# movement in total env tax revenue in time t-x has an effect on emission in time t
+# countries_em_tax_ccf_res %>%
+#   ggplot(
+#     aes(
+#       x = (LAG),
+#       y = (ACF),
+#       color = country
+#     )
+#   ) +
+#   geom_point(size = 3) +
+#   labs(
+#     x = "LAG (Delay between correlation)",
+#     y = "ACF (Auto-correlation between Time-Series)",
+#     colour = 'Country',
+#     title = "Significant Cross Correlation Between Environmental Tax and Total Emissions Time Series"
+#   )
+```
+
+
+
+<!-- ### Flaws and Further Exploration -->
+
+
+
+
+
+# References
+
+1. **Total Growth Per Country:** https://data.oecd.org/natincome/value-added-by-activity.htm#indicator-chart
+
+2. **Total Emission Per Country:** https://www.wri.org/resources/data-sets/cait-country-greenhouse-gas-emissions-data
+
+<!-- 3. **Environmental Tax Revenue:** https://data.oecd.org/envpolicy/environmental-tax.htm -->
+
+

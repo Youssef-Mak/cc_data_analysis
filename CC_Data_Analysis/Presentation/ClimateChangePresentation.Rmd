@@ -83,10 +83,16 @@ int_growth_added_df %>%
   - Variance 
   - Autocorrelation, etc. 
   
+# Raw Time Series 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+plot_ts(em_tot_growth_merged_df, "United States", diff=FALSE)
+```
+  
 # Stationarized Time Series
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
-plot_time_series(em_tot_growth_merged_df, "United States")
+plot_ts(em_tot_growth_merged_df, "United States", diff=TRUE)
 ```
 
 # Cross Correlation Tests
@@ -100,7 +106,7 @@ plot_time_series(em_tot_growth_merged_df, "United States")
 # Cross Correlation Plot
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
-plot_time_series(em_tot_growth_merged_df, "United States")
+plot_ccf(em_tot_growth_merged_df, "United States")
 ```
 
 
@@ -120,7 +126,7 @@ countries_gr_em_ccf_res %>%
     x = "LAG (Delay between correlation)",
     y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
-    title = "Significant Cross Correlation Between Total Growth and Total Emissions Time Series"
+    title = "Significant Cross Correlation Between Total Emissions and Total Growth Time Series"
   )
 ```
 
@@ -137,9 +143,8 @@ countries_gr_em_ccf_res %>%
   geom_histogram() +
   labs(
     x = "LAG (Delay between auto-correlation)",
-    # y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
-    title = "Significant Cross Correlation Lag Distribution Between Country Growth and Total Emissions Time Series"
+    title = "Significant Cross Correlation Lag Distribution Between Total Emissions and Total Growth Time Series"
   )
 ```
 
@@ -147,6 +152,7 @@ countries_gr_em_ccf_res %>%
 # Auto-Correlation Density at LAG 0
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
+countries_lagz <- countries_gr_em_ccf_res %>% filter(LAG == 0) %>% select("country")
 countries_gr_em_ccf_res %>% filter(LAG == 0) %>% 
   ggplot(
     aes(
@@ -156,9 +162,8 @@ countries_gr_em_ccf_res %>% filter(LAG == 0) %>%
   geom_density() +
   labs(
     x = "ACF (Auto-Correlation between Time Series)",
-    # y = "ACF (Auto-correlation between Time-Series)",
     colour = 'Country',
-    title = "Significant Cross Correlation ACF Distribution Between Country Growth and Total Emissions Time Series "
+    title = "Significant Cross Correlation ACF Distribution Between Total Emissions and Total Growth Time Series "
   )
 ```
 
