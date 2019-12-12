@@ -7,14 +7,16 @@ library(tidyverse)
 library(knitr)
 library(tsibble)
 library(stringr)
-library(stringi)
+
 library(feasts)
 library(fable)
 library(tibble)
-library(purrr)
-library(broom)
-library(keras)
 
+library(htmltools)
+library(tmap)
+library(sf)
+library(spData)
+library(sp)
 Econometrics <- read_excel("data/raw/WDIEXCEL.xlsx",sheet = "Data")
 
 Econometrics <- Econometrics %>% clean_names() %>% select(-indicator_code) %>%
@@ -50,12 +52,6 @@ WorldDamageEmissions <- DamageEmssionsOutput %>% inner_join(GreenhouseGas,by = c
   as_tsibble(key = country_code,index = year)
   
 WorldCCF <-   WorldDamageEmissions %>% group_split(country_code)
-
-#EmissionDamageModels <- WorldDamageEmissions %>% model( arimaEmission = ARIMA(adjusted_savings_particulate_emission_damage_percent_of_gni))
-#GreenhouseEmissionModels <- WorldDamageEmissions %>% model( arimaGreenhouse = ARIMA(total_greenhouse_gas_emissions_kt_of_co2_equivalent))
-#fc <- EmissionDamageModels %>% select(arima) %>% coef()
-#small <- EmissionDamageModels %>% 
- # inner_join(GreenhouseEmissionModels,by = c("country_code" = "country_code"))
 
 GenerateCCF <- function(CountryTibble,emptyCCFList){
   country <- CountryTibble$country_code[[1]]
@@ -99,7 +95,7 @@ GetSigLevels <- function(worldData){return(worldData[[3]])}
 WorldResults <-  lapply(WorldCCF,FUN = GenerateCCF)
 Relationships<- lapply(WorldResults,FUN = GetCCFRelationshipsFromWorld) %>% bind_rows()
 CCFPerCountry<- lapply(WorldResults,FUN = GetCCFObjectsFromWorld)
-AllSignificanceLevels <- lapply(WorldResults,FUN = GetSigLevels) %>% bind_rows()
+AllSignificanceLevels <- lapply(WorldResults,FUN = GetSigLevels) 
 Relationships <- Relationships%>% right_join(CountryNames, by = c("country_code" = "country_code"))
 
 RegionalRelationships <- Relationships %>% group_split(region)
@@ -238,7 +234,7 @@ WorldRelationPlot <-WorldRelation %>%
                               "nothEnoughInfo" = "Not enough info",
                               "NumNegDec" = "Negative correlation with decreasing",
                               "NumNegInc" = "Negative corrrelation with increasing",
-                              "NumNone" = "no correlation",
+                              "NumNone" = "No correlation",
                               "NumPosDec" = "Positive correlation with decreasing",
                               "NumPosInc" = "Positive correlation with increasing"))+
   scale_fill_discrete(labels = c("both",
@@ -249,12 +245,7 @@ WorldRelationPlot <-WorldRelation %>%
                                  "Positive correlation with decreasing emissions",
                                  "Positive correlation with increasing emissions"))+
   guides(color=FALSE)
-WorldRelationPlot
-library(htmltools)
-library(tmap)
-library(sf)
-library(spData)
-library(sp)
+
 GetCategory <- function(CountryName)
 {
   category <- WorldInfo %>% filter(str_detect(string = CountryName,pattern = str_sub(short_name,1,4)) ) %>% select(RelationshipCategory)
@@ -262,14 +253,14 @@ GetCategory <- function(CountryName)
   else if(nrow(category) == 1){category = category[[1]]}
   else{
     NegativeInc = paste0("Dominican Reblic|","Mauri|","Austria|","Guin|","Niger|","United States|","Mala|","The|","United A|","Turk|","South Afr|","New Z|","Slove")
-    #PosInc = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
+    
     PosDec = paste0("United Kingdom|","Democratic Republic of the Congo|","Slova")
     
     NoInfo = paste0("North|","Dem. Rep. Korea|","French|","South S|","New C|","Green|","Dominica")
     
     both = paste0("Australia|","Greece")
     if(str_detect(CountryName,NegativeInc)){category = "Negative cross correlation with increasing emissions"}
-    #else if(str_detect(CountryName,PosInc)){category = "Positive Increasing"}
+  
     else if(str_detect(CountryName,PosDec)){category = "Positive cross correlations with decreasing emissions"}
     else if(str_detect(CountryName,NoInfo)){category = "No Info"}
     else if(str_detect(CountryName,both)){category = "Both negative and positive correlation depending on the lag"}
@@ -296,29 +287,98 @@ tut <-tut %>% as_tsibble(index = year)
 tut <- tut %>% as_tsibble(index = year)
 fit <- tut %>% model(arima = ARIMA(log(averageRate)))
 fc <- fit %>% forecast(h = "25 years")
-fc %>% autoplot(tut,level = NULL)
+fcplot <- fc %>% autoplot(tut,level = NULL)
 
 
 #Simulations
 ss <- 1000
 NumYears <- 10
-NumCountries <- WorldInfo %>% filter(RelationshipCategory!="No Info",RelationshipCategory!="Both") %>% nrow()
+NumCountries <- WorldInfo %>% filter(RelationshipCategory!="No Info") %>% nrow()
 averageSignificanceLevel <- Reduce("+",AllSignificanceLevels)/length(AllSignificanceLevels)
 
 pos <- averageSignificanceLevel
 neg <- averageSignificanceLevel * -1
-results <- rep(NA,ss) 
+results <- tribble(~positiveResults,~negativeResults,~noneResults,~bothResults)
 for(i in 1:ss){
-  countrySSTest <-
+  countrySSTest <-tribble(~positive,~negative,~none,~both)
   for(j in 1:NumCountries){
 
-    currentSample <- runif(NumYears,min = -1,max = 1)
+    currentSample <- rnorm(NumYears,mean = 0,sd = pos/2)
 
-    negative <- sum(currentSample <= neg)
-    positive <- sum(currentSample >= pos)
+    negativeR <- sum(currentSample <= neg) > 0
+    positiveR <- sum(currentSample >= pos) > 0
     
-    none <- NumYears - negative - positive
-    simresults <- c(negative,positive,none)
+    noneR <- !(positiveR || negativeR)
     
+    bothR <- negativeR && positiveR
+    
+    if(bothR)
+    {
+      negativeR <- FALSE
+      positiveR <- FALSE
+    }
+    countrySSTest <- countrySSTest %>% add_row(positive = negativeR, negative = positiveR, none = noneR, both = bothR)
   }
+  resultsEntry <- countrySSTest %>% summarise(positiveResults = sum(positive),negativeResults = sum(negative),noneResults = sum(none),bothResults = sum(both))
+  results <- results %>% bind_rows(resultsEntry)
 }
+TrueResults <-  WorldInfo %>% filter(RelationshipCategory!="No Info") %>%
+  summarise(both = sum(str_detect(RelationshipCategory,"Both")),
+            positive = sum(str_detect(RelationshipCategory,"Positive") ) - both, 
+            negative = sum(str_detect(RelationshipCategory,"Negative cross correlation")),
+            none = sum(RelationshipCategory == "No correlation" )
+            )
+
+DunnSidak <- 1 - (1-0.05)^(1/165)
+DunnSidakLow <- DunnSidak
+DunnSidakHigh <- 1- DunnSidak
+bothTrue <- TrueResults$both[1]
+noneTrue <- TrueResults$none[1]
+NegativeTrue <- TrueResults$negative[1]
+PositiveTrue <- TrueResults$positive[1]
+
+NoneSigTestLow <- results %>% filter(noneResults < noneTrue) %>% nrow()
+NoneSigTestHigh <- results %>% filter(noneResults > noneTrue) %>% nrow()
+
+BothSigTestLow <- results %>% filter(bothResults < bothTrue) %>% nrow()
+BothSigTestHigh <- results %>% filter(bothResults > bothTrue) %>% nrow()
+
+NegSigTestLow <- results %>% filter(negativeResults < NegativeTrue) %>% nrow()
+NegSigTestHigh <- results %>% filter(negativeResults > NegativeTrue) %>% nrow()
+
+PosSigTestLow <- results %>% filter(positiveResults < PositiveTrue) %>% nrow()
+PosSigTestHigh <- results %>% filter(positiveResults > PositiveTrue) %>% nrow()
+
+bothHist <-results %>% ggplot(aes(x = bothResults)) + geom_histogram(binwidth  = 1,
+                                                                     col = "red",
+                                                                     fill = "blue") + 
+  xlab(" # of both results per simulation") + 
+  ylab("# of results") + 
+  ggtitle("simulation results for # of countries with both positive and negative cross correlations") + 
+  geom_vline(xintercept = bothTrue)
+
+PosHist <- results %>%ggplot(aes(x = positiveResults)) +  geom_histogram(binwidth  = 1,
+                                                                         col = "red",
+                                                                         fill = "blue") + 
+  xlab(" # of positive results per simulation") + 
+  ylab("# of results") + 
+  ggtitle("simulation results for # of countries with positive cross correlations") + 
+  geom_vline(xintercept = PositiveTrue)
+
+NegHist <- results %>%ggplot(aes(negativeResults)) + geom_histogram(binwidth  = 1,
+                                                                    col = "red",
+                                                                    fill = "blue") + 
+  xlab(" # of negative cross correlation countries per simulation") + 
+  ylab("# of results") + 
+  ggtitle("simulation results for # of countries with negative cross correlations") + 
+  geom_vline(xintercept = NegativeTrue)
+
+noneHist <- results %>%ggplot(aes(noneResults)) +  geom_histogram(binwidth  = 1,
+                                                                  col = "red",
+                                                                  fill = "blue") + 
+  xlab(" # of no correlation results per simulation") + 
+  ylab("# of results") + 
+  ggtitle("simulation results for # of countries with no significant cross correlations") + 
+  geom_vline(xintercept = noneTrue)
+
+
