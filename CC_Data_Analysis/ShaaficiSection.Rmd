@@ -493,8 +493,7 @@ noneHist
 bothHist
 ```
 The actual results for each category is that black line shown.
-Using Dunn-Sidák correction the actual values must be either smaller than or equal to the bottom `r DunnSidakLow` % 
-of simulations or greater than or equal to `r DunnSidakHigh`%. The categories "both" and "positive" cross correlations
+Using Dunn-Sidak correction the actual values must be either smaller than or equal to the bottom `r DunnSidakLow` percent of simulations or greater than or equal to `r DunnSidakHigh` percent. The categories "both" and "positive" cross correlations
 are well within those ranges and we cannot determine if these results are not just due to chance and are not random.
 
 But Negative cross correlations are significantly higher than all other simulated values and no cross correlations are significantly lower. Therefor we can say that a relationship is there. 
