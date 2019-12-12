@@ -63,6 +63,7 @@ GenerateCCF <- function(CountryTibble,emptyCCFList){
   EmissionsIncrease <- EmissionsIncrease$coefficients
   EmissionsIncrease <- (EmissionsIncrease["year"] > 0) %>% unname()
   significanceLevel <- 2 / sqrt(nrow(CountryTibble))
+
   tempCCF <- ccf(CountryTibble$adjusted_savings_particulate_emission_damage_percent_of_gni,
                  CountryTibble$total_greenhouse_gas_emissions_kt_of_co2_equivalent,
                  plot = FALSE)
@@ -89,15 +90,16 @@ GenerateCCF <- function(CountryTibble,emptyCCFList){
   tempCCF$snames <-paste0("Particulate damage and greenhouse gas emissions cross correlation for country:",
                                    country)
   emptyCCFList[[length(emptyCCFList) + 1]]<-(list(tempCCF,country))
-  return(list(CCFRelationships,emptyCCFList))
+  return(list(CCFRelationships,emptyCCFList,significanceLevel))
 }
 
 GetCCFRelationshipsFromWorld <- function(worldData){return(worldData[[1]])}
 GetCCFObjectsFromWorld <- function(worldData){return(worldData[[2]])}
+GetSigLevels <- function(worldData){return(worldData[[3]])}
 WorldResults <-  lapply(WorldCCF,FUN = GenerateCCF)
 Relationships<- lapply(WorldResults,FUN = GetCCFRelationshipsFromWorld) %>% bind_rows()
 CCFPerCountry<- lapply(WorldResults,FUN = GetCCFObjectsFromWorld)
-
+AllSignificanceLevels <- lapply(WorldResults,FUN = GetSigLevels) %>% bind_rows()
 Relationships <- Relationships%>% right_join(CountryNames, by = c("country_code" = "country_code"))
 
 RegionalRelationships <- Relationships %>% group_split(region)
@@ -172,7 +174,22 @@ for(region in RegionalRelationships)
     geom_bar(stat="identity") + labs(
       title = regionName
     ) + 
-    scale_y_discrete(limits = seq(from = 0,to = max(fixedRegion$value), by = 5))
+    scale_y_discrete(limits = seq(from = 0,to = max(fixedRegion$value), by = 5))+
+    scale_x_discrete(labels = c("both" = "both",
+                                "nothEnoughInfo" = "Not enough info",
+                                "NumNegDec" = "Negative correlation with decreasing",
+                                "NumNegInc" = "Negative corrrelation with increasing",
+                                "NumNone" = "no correlation",
+                                "NumPosDec" = "Positive correlation with decreasing",
+                                "NumPosInc" = "Positive correlation with increasing"))+
+    scale_fill_discrete(labels = c("both",
+                                   "Not enough info",
+                                   "Negative correlation with decreasing emissions",
+                                   "Negative corrrelation with increasing emissions",
+                                   "no correlation",
+                                   "Positive correlation with decreasing emissions",
+                                   "Positive correlation with increasing emissions"))+
+    guides(color=FALSE)
   RegionalPlots[[length(RegionalPlots) + 1]] <- regionPlot
   
   WorldCountryPosInc[[length(WorldCountryPosInc) + 1]] <- PosCountriesInc
@@ -188,27 +205,50 @@ for(region in RegionalRelationships)
   WorldRelation[[length(WorldRelation) + 1]] <- fixedRegion
 }
 
+EastAsiaPacificBar <- RegionalPlots[[1]]
+EuropeCentralAsiaBar <- RegionalPlots[[2]]
+LatinAmericaCaribbeanBar <- RegionalPlots[[3]]
+MiddleEastAfricaBar <- RegionalPlots[[4]]
+NorthAmericaBar <- RegionalPlots[[5]]
+SouthAsiaBar <- RegionalPlots[[6]]
+SubSaharaAfricaBar <- RegionalPlots[[7]]
+
 WorldRelation <- WorldRelation %>% bind_rows() %>% 
   pivot_wider(names_from = "Relationship",values_from = "value",values_fn = list(value = sum)) %>%
   pivot_longer(cols = colnames(.),names_to = "Relation",values_to = "value")
 
 WorldNotEnoughInfo <- WorldNotEnoughInfo %>% bind_rows() %>% mutate(RelationshipCategory = "No Info")
-WorldInteresting <-WorldInteresting %>% bind_rows() %>% mutate(RelationshipCategory = "Both")
+WorldInteresting <-WorldInteresting %>% bind_rows() %>% mutate(RelationshipCategory = "Both negative and positive correlation depending on the lag")
 
-WorldCountryNegInc <- WorldCountryNegInc %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative Increasing")
-WorldCountryNegDec <- WorldCountryNegDec %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative Decreasing")
+WorldCountryNegInc <- WorldCountryNegInc %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative cross correlation with increasing emissions")
+WorldCountryNegDec <- WorldCountryNegDec %>% bind_rows()  %>% mutate(RelationshipCategory = "Negative cross correlation decreasing emissions")
 
-WorldCountryPosInc<-WorldCountryPosInc %>% bind_rows() %>% mutate(RelationshipCategory = "Positive Increasing")
-WorldCountryPosDec<-WorldCountryPosDec %>% bind_rows() %>% mutate(RelationshipCategory = "Positive Decreasing")
+WorldCountryPosInc<-WorldCountryPosInc %>% bind_rows() %>% mutate(RelationshipCategory = "Positive cross correlation with increasing emissions")
+WorldCountryPosDec<-WorldCountryPosDec %>% bind_rows() %>% mutate(RelationshipCategory = "Positive cross correlations with decreasing emissions")
 
-WorldCountryNone <- WorldCountryNone %>% bind_rows()  %>% mutate(RelationshipCategory = "None")
+WorldCountryNone <- WorldCountryNone %>% bind_rows()  %>% mutate(RelationshipCategory = "No correlation")
 WorldInfo <- bind_rows(WorldNotEnoughInfo,WorldInteresting,WorldCountryNegInc,WorldCountryNegDec,WorldCountryPosInc,WorldCountryPosDec,WorldCountryNone)
 WorldRelationPlot <-WorldRelation %>% 
   ggplot(aes(x = Relation, y = value, colour = Relation, fill = Relation)) +
   geom_bar(stat = "identity") + 
   labs(y = "Number of countries",
        title = "World stats")  + 
-  scale_y_discrete(limits = seq(from = 0,to = max(WorldRelation$value), by = 5))
+  scale_y_discrete(limits = seq(from = 0,to = max(WorldRelation$value), by = 5))+
+  scale_x_discrete(labels = c("both" = "both",
+                              "nothEnoughInfo" = "Not enough info",
+                              "NumNegDec" = "Negative correlation with decreasing",
+                              "NumNegInc" = "Negative corrrelation with increasing",
+                              "NumNone" = "no correlation",
+                              "NumPosDec" = "Positive correlation with decreasing",
+                              "NumPosInc" = "Positive correlation with increasing"))+
+  scale_fill_discrete(labels = c("both",
+                                 "Not enough info",
+                                 "Negative correlation with decreasing emissions",
+                                 "Negative corrrelation with increasing emissions",
+                                 "no correlation",
+                                 "Positive correlation with decreasing emissions",
+                                 "Positive correlation with increasing emissions"))+
+  guides(color=FALSE)
 WorldRelationPlot
 library(htmltools)
 library(tmap)
@@ -228,17 +268,57 @@ GetCategory <- function(CountryName)
     NoInfo = paste0("North|","Dem. Rep. Korea|","French|","South S|","New C|","Green|","Dominica")
     
     both = paste0("Australia|","Greece")
-    if(str_detect(CountryName,NegativeInc)){category = "Negative Increasing"}
+    if(str_detect(CountryName,NegativeInc)){category = "Negative cross correlation with increasing emissions"}
     #else if(str_detect(CountryName,PosInc)){category = "Positive Increasing"}
-    else if(str_detect(CountryName,PosDec)){category = "Positive Decreasing"}
+    else if(str_detect(CountryName,PosDec)){category = "Positive cross correlations with decreasing emissions"}
     else if(str_detect(CountryName,NoInfo)){category = "No Info"}
-    else if(str_detect(CountryName,both)){category = "Both"}
+    else if(str_detect(CountryName,both)){category = "Both negative and positive correlation depending on the lag"}
     else{category = "WTF"}
       }
   return(category)
 }
 world <- spData::world
-world <- world %>%rowwise()%>%mutate(newC = GetCategory(name_long)) %>% ungroup() %>% st_as_sf()
-world %>% tm_shape() + tm_fill(col = "newC")
+world <- world %>%rowwise()%>%mutate(Relationship = GetCategory(name_long)) %>% ungroup() %>% st_as_sf()
+world %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
 
-getColourForRelation
+RegionBreakdown <- world %>% group_split(continent)
+Africa <- RegionBreakdown[[1]] %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+Asia <- RegionBreakdown[[3]] %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+Europe <- RegionBreakdown[[4]] %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+NorthAmerica <- RegionBreakdown[[5]]  %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+Oceania <- RegionBreakdown[[6]]  %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+SouthAmerica <- RegionBreakdown[[8]]  %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green"))
+
+
+
+tut <- WorldDamageEmissions %>%as_tibble() %>% select(- country_code) %>% group_by(year) %>% summarize(averageRate = mean(adjusted_savings_particulate_emission_damage_percent_of_gni))
+tut <-tut %>% as_tsibble(index = year)
+tut <- tut %>% as_tsibble(index = year)
+fit <- tut %>% model(arima = ARIMA(log(averageRate)))
+fc <- fit %>% forecast(h = "25 years")
+fc %>% autoplot(tut,level = NULL)
+
+
+#Simulations
+ss <- 1000
+NumYears <- 10
+NumCountries <- WorldInfo %>% filter(RelationshipCategory!="No Info",RelationshipCategory!="Both") %>% nrow()
+averageSignificanceLevel <- Reduce("+",AllSignificanceLevels)/length(AllSignificanceLevels)
+
+pos <- averageSignificanceLevel
+neg <- averageSignificanceLevel * -1
+results <- rep(NA,ss) 
+for(i in 1:ss){
+  countrySSTest <-
+  for(j in 1:NumCountries){
+
+    currentSample <- runif(NumYears,min = -1,max = 1)
+
+    negative <- sum(currentSample <= neg)
+    positive <- sum(currentSample >= pos)
+    
+    none <- NumYears - negative - positive
+    simresults <- c(negative,positive,none)
+    
+  }
+}
