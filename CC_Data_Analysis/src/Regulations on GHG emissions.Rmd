@@ -218,20 +218,20 @@ arimaWithKyotoIntervention <- function(df_tsibble) {
 
 world_ghg_emissions_arima <- world_ghg_emissions_ts %>% arimaWithKyotoIntervention()
 
-# # Plot fitted values. Looks pretty good
-# world_ghg_emissions_arima$x %>% 
-#   autoplot(series='Actual') +
-#   autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
-#   geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
-#   geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
-#   labs(
-#     title = 'Fitted values from ARIMA on World GHG emissions',
-#     subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
-#     x = 'Year',
-#     y = 'GHG emissions (mtco2e)',
-#     colour = 'Type'
-#   ) +
-#   theme_minimal()
+# Plot fitted values. Looks pretty good
+world_ghg_emissions_arima$x %>%
+  autoplot(series='Actual') +
+  autolayer(world_ghg_emissions_arima$fitted, series='Fitted') +
+  geom_vline(xintercept=kyoto_start_year, linetype='dashed') +
+  geom_text(aes(x=kyoto_start_year, y=max(world_ghg_emissions_ts$total_ghg_emissions_mtco2e)), label='Kyoto Protocol adopted') +
+  labs(
+    title = 'Fitted values from ARIMA on World GHG emissions',
+    subtitle = (paste0(year_range$min_year, '-', year_range$max_year)),
+    x = 'Year',
+    y = 'GHG emissions (mtco2e)',
+    colour = 'Type'
+  ) +
+  theme_minimal()
 
 # Display arima model
 summary(world_ghg_emissions_arima)
