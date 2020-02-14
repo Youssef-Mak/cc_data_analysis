@@ -18,10 +18,15 @@ output:
 knitr::opts_chunk$set(echo = FALSE, fig.height = 8, fig.width = 17)
 skimr::skim_with(numeric = list(hist = NULL))
 
-# Source Script File 
+# Source Script File For Emission Relationship
 source('EmissionEDA.R')
 
+# Source Script for Particulate Damage
+source('PartDamage.R')
+
 # load libraries
+# sudo apt-get install libudunits2-dev
+# sudo apt install libgdal-dev
 library(countrycode)
 library(ggrepel)
 library(fable)
@@ -39,6 +44,25 @@ library(tsibble)
 library(viridis)
 library(maps)
 library(purrr)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(stringr)
+library(feasts)
+library(tibble)
+library(htmltools)
+library(tmap)
+library(sf)
+library(spData)
+library(sp)
+library(ggfortify)
+library(ggrepel)
+library(tseries)
+library(plotly)
+library(ggrepel)
+library(ggthemes)
 ```
 
 # Introduction and Objectives
@@ -50,7 +74,7 @@ There are several possible reasons explaining the government reluctance. It may 
 In this report, we will attempt to gain insight on the reasons causing government reluctance as well as the global effect of protocol. This involves the following objectives :
 
 * Identify relationship between total GHG emissions and total economic growth 
-<!-- * Identify relationship between environmental tax revenue and total GHG emissions -->
+* Identify relationship between environmental tax revenue and total GHG emissions
 * Analyze the effect of international protocols on government emission legislation 
 * Identify relationship of total emission and particulate damage
 
@@ -82,25 +106,24 @@ To conduct a cross-correlation test, time series must be stationarized meaning t
 
 
 ```{r, warning=FALSE, fig.cap="\\label{fig:figs}Raw Time Series"}
+# Plot Raw Time Series
 plot_ts(em_tot_growth_merged_df, "United States", diff=FALSE)
 ```
-<!-- ![](../output/Plots/USRawTS.png) -->
 
 ```{r, warning=FALSE, fig.cap="\\label{fig:figs}Differenced Time Series"}
+# Plot Differenced Time Series 
 plot_ts(em_tot_growth_merged_df, "United States", diff=TRUE)
 ```
-<!-- ![](../output/Plots/USDiffTS.png) -->
 
 
-This was accomplished by an automated procedure that would both stationarize ad hoc and compute the cross-correlations for two given-time series.
+This was accomplished by an automated procedure that would both stationarize ad-hoc and compute the cross-correlations for two given-time series.
 
-<!-- ![](../output/Plots/XCorrUSPlot.png) -->
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 plot_ccf(em_tot_growth_merged_df, "United States")
 ```
 
-This process was to be completed for each country in data set that had sufficient year entries in order to construct the time series. In this case the cutoff was seven years as this would allow us to test for a reasonable amount of countries due to data set limitations. The statistically significant(\alpha = 0.05) country cross-correlations are then plotted together onto an amalgamated ACF plot that can then be analyzed.
+This process was to be completed for each country in data set that had sufficient year entries in order to construct the time series. In this case the cutoff was seven years as this would allow us to test for a reasonable amount of countries due to data set limitations. The statistically significant($\alpha = 0.05$) country cross-correlations are then plotted together onto an amalgamated ACF plot that can then be analyzed.
 
 ## GHG Emissions and Economic Growth
 
@@ -130,7 +153,6 @@ countries_gr_em_ccf_res %>%
     title = "Significant Cross Correlation Between Total Emissions and Total Growth Time Series"
   )
 ```
-<!-- ![](../output/Plots/XCorrCountryValEm.png) -->
 
 Interestingly, there appeared to be clusters in the 0, -1 and 1 lags. Notably, the largest cluster was located at the 0 lag and had a strongly positive auto-correlation. This would indicate that a rise in emissions is directly auto-correlated with an increase in economic growth in the same year. However, this cluster size is not significant enough to draw that conclusion.
 
@@ -148,7 +170,6 @@ countries_gr_em_ccf_res %>%
     title = "Significant Cross Correlation Lag Distribution Between Total Emissions and Total Growth Time Series"
   )
 ```
-<!-- ![](../output/Plots/CounGrowthHist.png) -->
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 countries_lagz <- countries_gr_em_ccf_res %>% filter(LAG == 0) %>% select("country")
@@ -165,7 +186,6 @@ countries_gr_em_ccf_res %>% filter(LAG == 0) %>%
     title = "Significant Cross Correlation ACF Distribution Between Total Emissions and Total Growth Time Series "
   )
 ```
-<!-- ![](../output/Plots/DensityLag0.png) -->
 
 It was also difficult to draw a conclusion from the group of countries that were presented in this cluster. These countries included South Korea, Mexico, Netherlands, Slovakia, Turkey, United Kingdom, Slovenia, and the	United States. It is possible that there is a shared economic attribute between these countries but it is not obvious. 
 
@@ -730,6 +750,125 @@ canada_electricity_ghg %>%
 
 
 
+# Particulate and Emissions Relationship
+## Definition
+
+Long Definition:
+"Particulate emissions damage is the damage due to exposure of a country's population to ambient concentrations of particulates measuring less than 2.5 microns in diameter (PM2.5), ambient ozone pollution, and indoor concentrations of PM2.5 in households cooking with solid fuels. Damages are calculated as foregone labor income due to premature death. Estimates of health impacts from the Global Burden of Disease Study 2016. Data for other years have been extrapolated from trends in mortality rates."
+--World bank researcher
+
+
+## Statistical concepts used in collecting the data
+" Within the national accounting framework, air pollution damages are estimated following a human capital approach. Damages from premature mortality are calculated as the present value of lost income during working age, 15-64. Premature mortality among children is valued by adjusting for years until working age and discounting more heavily into the future. Estimates are for both urban and rural areas. Exposure to household air pollution is proxied by the number of households in each country cooking with solid fuels."
+--world bank researcher
+ 
+## Why its relevant to developement
+
+ "Air pollution places a major burden on world health. In many places, including cities but also nearby rural areas, exposure to air pollution exposure is the main environmental threat to health. Long-term exposure to high levels of fine particulates in the air contributes to a range of health effects, including respiratory diseases, lung cancer, and heart disease, resulting in 3.2 million deaths annually according to the Global Burden of Disease 2010 study. Not only does exposure to air pollution affect the health of the world's people, it also carries huge economic costs and represents a drag on development, particularly for low and middle income countries and vulnerable segments of the population such as children and the elderly."
+  - World Bank researcher
+
+## Authors Limitations
+"Labor productivity losses, as calculated within the framework of adjusted net savings, represent only part of the economic costs of air pollution and should be interpreted as a lower-end estimate. "
+  - World Bank researcher
+  
+## Reasoning
+As the researcher stated in limitations, this provides an low end estimate of air pollution damage and exploring the relationship between emissions and particulate damage can help give a view between emissions and some of the damage it causes.
+
+Emissions were measured as total CO2
+
+
+There was a choice to choose between the particulate damage cost in terms of US$ or from the percentage of GNI%.
+GNI stands for Gross National Income and it is a measure of all the money earned as income from businesses and people. GNI gave a better measure of the relative burden then US dollars would have. If a coal miner and a billionaire both lost $50,000, the absolute value would be the same but the impact would be completely different.This logic was used in making this decision, not all countries have similar wealth so the *impact* must be measured.
+
+
+In general the impact has been going down. An arima forecast of 25 years shows the trajectory of particulate damage
+for the average particulate damage per country.
+```{r, warning = FALSE, message = FALSE}
+fcplot
+```
+
+##View of the world.
+
+A cross correlation was built for every country/territory in the world that is recognized by the world bank.
+The countries were put into 5 categories
+
+1.No correlation
+
+2.Positive correlation with increasing emissions
+
+3.Positive correlation with decreasing emissions
+
+4.Negative correlation with increasing emissions 
+
+5.Negative correlations with decreasing emissions
+
+##Results
+```{r, warning = FALSE, message = FALSE}
+WorldRelationPlot
+EastAsiaPacificBar 
+EuropeCentralAsiaBar
+LatinAmericaCaribbeanBar 
+MiddleEastAfricaBar 
+NorthAmericaBar 
+SouthAsiaBar 
+SubSaharaAfricaBar 
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+world %>% tm_shape() + tm_fill(col = "Relationship",palette = c("purple","blue","grey","black","red","green")) 
+Africa 
+Asia
+Europe
+NorthAmerica
+Oceania 
+SouthAmerica
+```
+
+##Issue with methodology
+
+All these countries are not independent of each other. By doing a cross correlation over 200 times we run into *multiple comparisons problem*. The multiple comparisons problem is when multiple hypotheses are tested,the likelihood of a wrong inference/outlier result increases. We need to correct for that and in order to do so we need to first understand how significance of cross correlations are calculated.
+
+##Correction and testing results
+
+The significance levels for a cross correlation with a 0.05 threshold is calculated by $\frac{2}{\sqrt{observations}}$ Observations in this case are all the years that have both particulate damage and emissions. A country was said to be positively correlated if there existed a lag year that had a significant relationship. There were some countries that had a positive correlation with some lags and also had a negative correlation with others. In general this was the break down of how the countries were categorized.
+
+1.positive correlation between particulate damage and emissions
+2.negative correlation between particulate damage and emissions
+3.both positive and negative correlation depending on the lag year chosen
+4.no correlation
+
+
+```{r, warning = FALSE, message = FALSE}
+TrueResults
+```
+
+In general cross correlations significance level follows a normal distribution along 0 with a standard deviation of  $\frac{2}{\sqrt{observations} * 2}$ this was derived from the formula earlier for the 95% confidence interval, which is two standard deviations, so halving it will give us a good SD to use for simulations.
+
+After running the experiment 1000 times These were the results for each category.
+
+```{r, warning = FALSE, message = FALSE}
+PosHist
+NegHist
+noneHist
+bothHist
+```
+The actual results for each category is that black line shown.
+Using Dunn-Sidak correction the actual values must be either smaller than or equal to the bottom `r DunnSidakLow` percent of simulations or greater than or equal to `r DunnSidakHigh` percent. The categories "both" and "positive" cross correlations
+are well within those ranges and we cannot determine if these results are not just due to chance and are not random.
+
+But the number of negative cross correlations are significantly higher than all other simulated values and the number of no cross correlations are significantly lower. Therefor we can say that a relationship is there and that it should be explored more.
+
+##Comments
+
+One failing of the simulations is that even though it simulates cross correlation significance levels well, it doesn't map the relationship between lag years well. If a significant relationship happens at year 0, it is very likely for there to also be a relationship at year 1 but the simulations did not take that into account.
+
+Another issue is the fact that GNI for almost every country is continuously growing. So even if the damage is growing, the relative burden will likely always fall. A choice was made to go with GNI as opposed to US dollars for time but exploring that relationship could be worthwhile.
+
+## Suggestions for further explorations
+
+particulate damage only provides a low estimate to the damage of air pollution. Exploring other metrics and adding them could be worthwhile and provide better insight.
+
 # References
 
 1. **Total Growth Per Country:** https://data.oecd.org/natincome/value-added-by-activity.htm#indicator-chart
@@ -738,4 +877,44 @@ canada_electricity_ghg %>%
 
 3. **Environmental Tax Revenue:** https://data.oecd.org/envpolicy/environmental-tax.htm
 
-4. https://otexts.com/fpp2/regarima.html
+4. **Arima Modeling:** https://otexts.com/fpp2/regarima.html
+
+# Datasets used
+
+  ### Country Emission Data 
+  - Project path : "data/raw/CAIT-Country-CO2-Emissions-Energy-Sub-Sector.csv"
+  - Other path: 'data/raw/CAIT Country GHG Emissions/CAIT Country GHG Emissions.csv'
+  - URL : https://www.wri.org/resources/data-sets/cait-country-greenhouse-gas-emissions-data
+
+  ### Value added(value generated by producing goods and services) per activity(sector) globally
+  - Project Path : "data/raw/value_added_per_act.csv"
+  - URL : https://data.oecd.org/natincome/value-added-by-activity.htm#indicator-chart
+
+  ### Regulations per country 
+  - Project Path : "data/raw/law_search/data.csv"
+  - URL : http://www.lse.ac.uk/GranthamInstitute/climate-change-laws-of-the-world/
+
+  ### Environmental tax Revenue per country per year
+  - Project Path : "data/raw/emission_tax.csv"
+  - URL : https://data.oecd.org/envpolicy/environmental-tax.htm
+
+  ### Employment by activity 
+  - Project Path : "data/raw/employment_per_act.csv"
+  - URL : https://data.oecd.org/emp/employment-by-activity.htm
+  ### Canada GHG Emissions
+  - Project Path: "data/raw_emission_per_sect/GHG-emissions-sector-en.csv"
+  - URL: https://www.canada.ca/en/environment-climate-change/services/environmental-indicators/greenhouse-gas-emissions.html
+
+  ### Per Sector Emission 
+  - Source: "United Nations FAO"
+  - URL : https://ourworldindata.org/co2-and-other-greenhouse-gas-emissions#emissions-by-sector
+      #### CO2 per sector
+      - Project Path : "data/raw/emission_per_sect/global-carbon-dioxide-emissions-by-sector.csv"
+      #### Methane per sector
+      - Project Path : "data/raw/emission_per_sect/methane-emissions-by-sector-gg-coe.csv"
+      #### Nitrous Oxide per sector
+      - Project Path : "data/raw/emission_per_sect/nitrous-oxide-emissions-by-sector.csv"
+      #### Greenhouse gas emission per sector
+      - Project Path : "data/raw/emission_per_sect/greenhouse-gas-emissions-by-sector.csv"  
+
+
